@@ -32,6 +32,8 @@ struct Config {
     // [Camera] right stick while the game is mouselooking (cursor hidden)
     float    cameraSpeed  = 1000.0f;    // px/s at full deflection
     bool     cameraInvertY = false;
+    float    smoothMs      = 60.0f;     // smooth camera option: time constant (ms)
+    bool     camSmooth     = false;     // set from the addon's options (wpCamSmooth)
     float    zoomSpeed     = 8.0f;      // wheel notches/s at full deflection (LB+RB held)
     int      peekDelayMs   = 250;       // right stick idle this long -> CAM_IDLE (crosshair peek); 0 = off
     int      crosshairY    = 95;        // pointer parked this many px above window centre on entering controller mode

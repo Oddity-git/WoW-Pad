@@ -7,7 +7,7 @@
 
 namespace {
 AddonSettings g_s;
-DWORD         g_lastCheck = 0;
+CRITICAL_SECTION g_lock;
 FILETIME      g_lastWrite = {};
 wchar_t       g_lastPath[MAX_PATH * 2] = {};
 
@@ -84,24 +84,24 @@ void Load(const wchar_t* path) {
         s.zoomScale = ReadNum(buf, "wpZoomSens", 1.0f, 0.05f, 3.0f);
         s.invertY  = ReadBool(buf, "wpInvertY");
         s.walkRun  = ReadBool(buf, "wpWalkRun") == 1;
+        s.camSmooth = ReadBool(buf, "wpCamSmooth") == 1;
         s.peekDelayMs = (int)ReadNum(buf, "wpPeekDelay", 0.0f, 0.0f, 2000.0f);
         if (s.peekDelayMs && s.peekDelayMs < 50) s.peekDelayMs = 50;
+        EnterCriticalSection(&g_lock);
         g_s = s;
+        LeaveCriticalSection(&g_lock);
         Log_Write("Addon settings: camera x%.2f, pointer x%.2f, zoom x%.2f, invert Y %s, peek delay %s",
                   s.camScale, s.ptrScale, s.zoomScale, s.invertY < 0 ? "(ini)" : (s.invertY ? "on" : "off"),
                   s.peekDelayMs ? "set" : "(ini)");
         if (s.peekDelayMs) Log_Write("  peek delay %d ms", s.peekDelayMs);
-        Log_Write("  walk/run on stick tilt: %s", s.walkRun ? "on" : "off");
+        Log_Write("  walk/run on stick tilt: %s, smooth camera: %s", s.walkRun ? "on" : "off", s.camSmooth ? "on" : "off");
     }
     free(buf);
     CloseHandle(f);
 }
 }
 
-void AddonSettings_Poll() {
-    DWORD now = GetTickCount();
-    if (g_lastCheck && now - g_lastCheck < 1000) return;
-    g_lastCheck = now;
+static void Poll() {
     wchar_t path[MAX_PATH * 2];
     FILETIME ft = {};
     if (!FindNewest(path, MAX_PATH * 2, &ft)) return;
@@ -111,4 +111,24 @@ void AddonSettings_Poll() {
     Load(path);
 }
 
-const AddonSettings& AddonSettings_Get() { return g_s; }
+static DWORD WINAPI SettingsThread(LPVOID) {
+    for (;;) { Poll(); Sleep(1000); }
+    return 0;
+}
+
+void AddonSettings_Start() {
+    static bool started = false;
+    if (started) return;
+    started = true;
+    InitializeCriticalSection(&g_lock);
+    Poll();   // settings in place before the first controller update
+    HANDLE t = CreateThread(nullptr, 0, SettingsThread, nullptr, 0, nullptr);
+    if (t) { SetThreadPriority(t, THREAD_PRIORITY_BELOW_NORMAL); CloseHandle(t); }
+}
+
+AddonSettings AddonSettings_Get() {
+    EnterCriticalSection(&g_lock);
+    AddonSettings s = g_s;
+    LeaveCriticalSection(&g_lock);
+    return s;
+}

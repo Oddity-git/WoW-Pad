@@ -371,3 +371,64 @@ Built on 0.8.1 (the stable one; 0.8.2-0.8.6 shelved). Only addition: walk/run op
 ## 0.8.11: Questie Lua error (addon only; DLL stays 0.8.7)
 Questie puts an AceGUI widget table (not a frame) in UISpecialFrames as QuestieConfigFrame; Nav.lua:41 called :GetName() on it. Both window checks (Nav roots, Core AnyWindowOpen) now use WP.AsFrame(): real frames as-is, AceGUI widgets via their .frame, anything else skipped.
 - [ ] Questie on: no Lua errors with gossip/quest/bags open. Questie's config window (/questie) can be navigated and closed with B.
+
+## 1.0.1: no camera stutter on LB/RB (DLL only)
+Signal taps for Ctrl/Alt combos (LB, RB, Start, Back, nav, walk toggle) wait 5-15 ms between key events, ~40-80 ms in total under Wine; the poll loop stopped sending camera motion meanwhile, then caught up in one jump. Now the waits keep sending camera motion (camera look only: not pointer mode, zoom or peek pause), and that time isn't sent again on the next tick.
+- [ ] Spin the camera with the right stick and tap LB/RB repeatedly: smooth turning, targeting still works.
+- [ ] Same with Start (radial) and Back (map): no stutter before the window opens.
+- [ ] R3 on/off a few times: no crash (pointer-mode code untouched).
+
+## 1.0.2: smooth camera option, no settings-file hitch (DLL + addon + ini)
+- The addon-settings file (SavedVariables\WowPad.lua) was checked from the controller poll loop once a second (directory scan + file stat under Wine): a possible small hitch every second. Now a background thread does it.
+- Options > Experimental > "Smooth camera*": exponential smoothing of the right stick for camera turning, [Camera] SmoothMs=60 (time constant). Not applied in pointer mode or zoom. The tail of the glide keeps the camera active, so peek starts after it settles.
+- Peek checkbox moved back under Crosshair with a note "Turning it off is experimental."
+- [ ] Smooth camera off: turning feels like 1.0.1. On + Apply: log `smooth camera: on`, turning glides; stop is soft but not floaty. Try SmoothMs 30-120.
+- [ ] LB/RB while turning: still no stutter. R3 on/off: no crash. Peek tooltips still appear after the glide stops.
+
+## 1.0.3 (addon only, test): bar toggles + own cast bar; DLL stays 1.0.2
+- Options > WowPad > **Bars** (new sub-page): controller bar settings moved here, plus toggles for WowPad's XP/rep bar, pet bar and a new movable cast bar (all default on). Main page right column now: Buttons, Messages, Experimental.
+- Cast bar: CastingBarFrameTemplate (Blizzard's own cast bar code) in a holder that moves/scales in Edit bar layout ("Cast bar" box). While on, Blizzard's CastingBarFrame is unregistered and hidden; turning ours off gives Blizzard's back (only if we were the ones who switched it off).
+- Pet bar toggle in combat applies after combat (secure).
+- [ ] Bars page shows; toggles hide/show each bar at once. Edit mode shows boxes only for enabled bars.
+- [ ] Cast something: WowPad cast bar shows (icon/text/spark, channel and interrupt work), Blizzard's doesn't. Move/resize it in edit mode; position kept after /reload.
+- [ ] Cast bar off: Blizzard's comes back at its usual place.
+
+## 1.0.4 (addon only, test): world map cursor; includes 1.0.3; DLL stays 1.0.2
+WoW-Forever-style map cursor (screenshots from the user): gold diamond (own texture Textures/mapcursor.tga), gold crosshair lines across WorldMapDetailFrame, "Cursor: x, y" / "Player: x, y" bottom-left. Shown in controller mode while the world map is open; the real cursor is blanked (SetCursor blank, like peek); pointer-mode arrow is hidden on the map.
+- Right stick moves it (WoW's pointer). D-pad jumps between pins/buttons and the diamond sits on the selection until the stick moves again.
+- A clicks the selection: on the map itself = zoom in on the zone under the cursor; on a pin = click the pin. X = right-click (zoom out on the map).
+- B: zoom out (WorldMapZoomOutButton) while on a continent/zone; closes at world level. Hint bar: A Change Map / Select, X Zoom Out, D-pad Pins, B Back/Close.
+- [ ] Open map with Back: diamond + lines + coords; no stray arrow/hand.
+- [ ] Stick moves diamond; A on a zone zooms in there (check it's the zone under the diamond). B backs out to continent, world, then closes.
+- [ ] D-pad onto a Questie pin: diamond jumps to it, tooltip shows; A clicks it.
+- [ ] Close map: crosshair/camera normal. Touch the mouse with the map open: normal cursor.
+
+## 1.0.5 (DLL + addon, test): map cursor start/close fixes; includes 1.0.3/1.0.4
+Report: map cursor started at the crosshair spot, and after closing the map the crosshair stayed where the map cursor was.
+- Addon: a newly opened window starts on its default button again (diamond there), not at the hidden pointer; the pointer only takes over when the stick moves.
+- DLL: camera look is now detected as "no cursor image AND pointer at the window centre" (WoW keeps it there during camera look). The addon's blank cursor on the map also reports no image, which made the DLL think the camera was on while the map was open (re-centre fired on open, not on close; peek hid the cursor in the map).
+- [ ] Open map: diamond on the default button; stick takes it from there. Close map: crosshair back at its spot (log: "Crosshair: camera resumed, re-centred" after closing, not on opening).
+- [ ] Other windows (bags, vendor): unchanged; closing them re-centres as before. Peek tooltips still work.
+
+## 1.0.6 (addon only, test): map A/X click the map itself; DLL stays 1.0.5
+Report: X didn't zoom out, A didn't zoom in. A/X clicked the Nav selection, which on the map never became WorldMapButton (likely an addon overlay, e.g. Questie, under the pointer). Now on the world map A/X secure-click WorldMapButton (left = zoom in at the cursor, right = zoom out), unless the D-pad put the cursor on a pin/button (then that is clicked). Hints: "A Zoom In / X Zoom Out", or "A Select / X Right-click" on a pin.
+- [ ] Stick somewhere on a zone, A: zooms into that zone. X: zooms out. Works again after zooming out.
+- [ ] D-pad onto a Questie pin, A: clicks the pin. Move the stick: A zooms again.
+
+## 1.0.7 (addon only, test): map clicks done directly; DLL stays 1.0.5
+1.0.6 report: A/X still didn't zoom (crosshair re-centre after closing the map works). Now A/X on the map don't go through a secure click of WorldMapButton at all: the PreClick calls the map code directly (WorldMapButton_OnClick(WorldMapButton, "LeftButton") / WorldMapZoomOutButton_OnClick, fallbacks ProcessMapClick / ZoomOut) and clears clickbutton. With /wp debug on, each map click prints "map LeftButton click: ok (continent c, zone z)"; errors always print.
+- [ ] A zooms in under the diamond, X zooms out. If not: /wp debug, try again, send the chat lines.
+
+## 1.0.8 (addon only, test): own cast bar; DLL stays 1.0.5
+1.0.3-1.0.7 cast bar (CastingBarFrameTemplate) showed nothing when casting. Now WowPad draws its own: StatusBar with the game's UI-StatusBar texture, UI-CastingBar-Border / -Spark / -Flash, spell name, remaining time, spell icon; casts (yellow), channels (green, counting down), pushback, success flash + fade, failed/interrupted (red text) + fade. Player events filtered by unit. Edit bar layout shows a preview bar ("Cast bar", 60%) to place it. No new art files.
+- [ ] Cast a spell with a cast time: bar fills, spark moves, name + timer + icon. Blizzard's bar doesn't show.
+- [ ] Channel (e.g. a drain or Arcane Missiles): bar empties. Move while casting: "Interrupted" in red.
+- [ ] Edit bar layout: preview bar visible in the box; move/resize; /reload keeps it.
+
+## 1.0.9 (addon only, test): new radial look; DLL stays 1.0.5
+WoW-Forever-style wheel (user's screenshots): 8 translucent dark wedges, bronze rim/spokes/hub ring, empty hub, "Main Menu" + LB o o o RB page dots, icons and labels inside the wedges, stronger gold glow + lighter fill on the selected wedge. Art generated by scripts/make_radial_art.py (radial_frame quarter 256x256, 2 wedge + 2 glow shapes 256x256, RLE TGA, ~121 KB total), turned into place with SetTexCoord in 90 degree steps. Empty wedges on page 3 stay plain (not dimmed).
+- [ ] Start: wheel looks right (no gaps/offsets between quarters; wedges line up with spokes; glow sits inside the selected wedge).
+- [ ] Stick direction lights the matching wedge; A opens it; LB/RB move the gold dot; B/Start close.
+
+## 1.0.10 (addon only, test): radial page dots light up
+Dots used Textures/disc (dark), so the gold tint never showed. Now Textures/dot (white): current page gold and larger, others grey.

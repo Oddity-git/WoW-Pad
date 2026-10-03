@@ -12,8 +12,14 @@ local WP = WowPad
 local panel = CreateFrame("Frame", "WowPadOptions", UIParent)
 panel.name = "WowPad"
 panel:Hide()
+-- Sub-page: Esc > Interface > AddOns > WowPad > Bars
+local barsPanel = CreateFrame("Frame", "WowPadOptionsBars", UIParent)
+barsPanel.name = "Bars"
+barsPanel.parent = "WowPad"
+barsPanel:Hide()
+local target = panel   -- page the helpers below add controls to
 
-local DLL_KEYS = { wpCamSens = 1, wpPtrSens = 1, wpZoomSens = 1, wpInvertY = false, wpPeekDelay = 250, wpWalkRun = false }
+local DLL_KEYS = { wpCamSens = 1, wpPtrSens = 1, wpZoomSens = 1, wpInvertY = false, wpPeekDelay = 250, wpWalkRun = false, wpCamSmooth = false }
 local saved = {}   -- DLL values as of the last reload
 
 local function DllValue(k)
@@ -45,7 +51,7 @@ local controls = {}
 
 -- Slider: opts = { min, max, step, fmt(v), get(), set(v) }
 local function Slider(name, label, tip, x, y, o)
-  local s = CreateFrame("Slider", name, panel, "OptionsSliderTemplate")
+  local s = CreateFrame("Slider", name, target, "OptionsSliderTemplate")
   s:SetPoint("TOPLEFT", x, y)
   s:SetWidth(170)
   s:SetMinMaxValues(o.min, o.max)
@@ -66,7 +72,7 @@ local function Slider(name, label, tip, x, y, o)
 end
 
 local function Check(name, label, tip, x, y, get, set)
-  local c = CreateFrame("CheckButton", name, panel, "InterfaceOptionsCheckButtonTemplate")
+  local c = CreateFrame("CheckButton", name, target, "InterfaceOptionsCheckButtonTemplate")
   c:SetPoint("TOPLEFT", x, y)
   _G[name .. "Text"]:SetText(label)
   c.tooltipText = tip
@@ -78,7 +84,7 @@ local function Check(name, label, tip, x, y, get, set)
 end
 
 local function Header(text, x, y)
-  local h = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+  local h = target:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   h:SetPoint("TOPLEFT", x, y)
   h:SetText(text)
 end
@@ -114,23 +120,21 @@ local function Build()
   Check("WowPadOptInv", "Invert camera up/down*", nil, L - 4, -190,
     DllGet("wpInvertY"), DllSet("wpInvertY"))
 
-  Header("|cffff9900Experimental|r", L - 4, -274)
-  Check("WowPadOptWalk", "Walk/run by stick tilt*",
-    "Slight tilt walks, full tilt runs, using the game's Run/Walk toggle. Stopping always returns to running. If you press the "
-    .. "keyboard Run/Walk key yourself, slight and full tilt swap; press that key again to fix it.",
-    L - 4, -292, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
-
   Header("Crosshair", L - 4, -222)
   Check("WowPadOptCross", "Show the crosshair dot", "A dot in the middle while the camera is under stick control.",
     L - 4, -240, function() return WowPadDB.crosshair ~= false end,
     function(v) WowPadDB.crosshair = v end)
   Check("WowPadOptPeek", "Crosshair tooltips (peek)",
     "When the right stick rests, camera look pauses for a moment so WoW shows the tooltip of whatever is "
-    .. "under the crosshair. Works best with Hardware Cursor on (Video options).",
-    L - 4, -316, function() return WowPadDB.peek ~= false end,
+    .. "under the crosshair. Works best with Hardware Cursor on (Video options). Turning it off is "
+    .. "experimental: the camera can jump after closing a window.",
+    L - 4, -264, function() return WowPadDB.peek ~= false end,
     function(v) WowPadDB.peek = v end)
+  local peekNote = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+  peekNote:SetPoint("TOPLEFT", L + 26, -290)
+  peekNote:SetText("|cffff9900Turning it off is experimental.|r")
   Slider("WowPadOptPeekDelay", "Peek delay*",
-    "How long the right stick must rest before peek mode pauses the camera.", L, -358,
+    "How long the right stick must rest before peek mode pauses the camera.", L, -332,
     { min = 100, max = 1000, step = 50, fmt = Ms, get = DllGet("wpPeekDelay"), set = DllSet("wpPeekDelay") })
 
   applyBtn = CreateFrame("Button", "WowPadOptApply", panel, "UIPanelButtonTemplate")
@@ -145,51 +149,90 @@ local function Build()
   pendingText:SetPoint("RIGHT", applyBtn, "LEFT", -8, 0)
 
   -- Right column: addon settings (immediate)
-  Header("Controller bar", R - 4, -56)
+  Header("Buttons", R - 4, -56)
+  Check("WowPadOptXAttack", "X also starts auto attack",
+    "X interacts (your " .. (WowPadDB.interactKey or "F") .. " binding) and starts attacking a hostile target.",
+    R - 4, -74, function() return WowPadDB.xAttack ~= false end,
+    function(v) WowPadDB.xAttack = v; WP.RefreshInteract() end)
+
+  Header("Messages", R - 4, -108)
+  Check("WowPadOptStatus", "Show the status line", "Mode, set and context above the bar.",
+    R - 4, -126, function() return WowPadDB.showStatus == true end,
+    function(v) WowPadDB.showStatus = v; WP.UpdateStatus() end)
+  Check("WowPadOptDebug", "Debug messages in chat", nil,
+    R - 4, -150, function() return WowPadDB.debug == true end,
+    function(v) WowPadDB.debug = v end)
+
+  Header("|cffff9900Experimental|r", R - 4, -184)
+  Check("WowPadOptWalk", "Walk/run by stick tilt*",
+    "Slight tilt walks, full tilt runs, using the game's Run/Walk toggle. Stopping always returns to running. If you press the "
+    .. "keyboard Run/Walk key yourself, slight and full tilt swap; press that key again to fix it.",
+    R - 4, -202, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
+  Check("WowPadOptSmooth", "Smooth camera*",
+    "Smooths right-stick camera turning, so it glides instead of stepping. Adds a little delay "
+    .. "(about 60 ms, [Camera] SmoothMs in wowpad.ini). Camera only, not the pointer.",
+    R - 4, -226, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
+
+  -- Bars page
+  target = barsPanel
+  local bt = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+  bt:SetPoint("TOPLEFT", 16, -16)
+  bt:SetText("WowPad: Bars")
+  local bs = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  bs:SetPoint("TOPLEFT", bt, "BOTTOMLEFT", 0, -6)
+  bs:SetText("Changes apply right away. Move and resize bars with Edit bar layout.")
+  Header("Controller bar", L - 4, -56)
   Check("WowPadOptAlways", "Always visible", "Off: the bar shows only in controller mode.",
-    R - 4, -74, function() return WowPadDB.barAlways ~= false end,
+    L - 4, -74, function() return WowPadDB.barAlways ~= false end,
     function(v)
       if (WowPadDB.barAlways ~= false) ~= v and WP.Bar then WP.Bar.ToggleAlways() end
     end)
   Check("WowPadOptBlizz", "Hide Blizzard action bars", "Hides the default bottom bars and art.",
-    R - 4, -98, function() return WowPadDB.hideBlizz ~= false end,
+    L - 4, -98, function() return WowPadDB.hideBlizz ~= false end,
     function(v) if (WowPadDB.hideBlizz ~= false) ~= v and WP.ToggleBlizzBars then WP.ToggleBlizzBars() end end)
-  Slider("WowPadOptScale", "Bar size", "Size of the controller bar.", R, -142,
+  Slider("WowPadOptScale", "Bar size", "Size of the controller bar.", L, -140,
     { min = 0.4, max = 1.6, step = 0.05, fmt = X,
       get = function() return (WowPadDB.bar and WowPadDB.bar.scale) or 1 end,
       set = function(v) if WP.Bar then WP.Bar.SetScale(v) end end })
-  local edit = CreateFrame("Button", "WowPadOptEdit", panel, "UIPanelButtonTemplate")
+  local edit = CreateFrame("Button", "WowPadOptEdit", barsPanel, "UIPanelButtonTemplate")
   edit:SetSize(150, 22)
-  edit:SetPoint("TOPLEFT", R - 4, -170)
+  edit:SetPoint("TOPLEFT", L - 4, -168)
   edit:SetText("Edit bar layout")
   edit:SetScript("OnClick", function()
     if InterfaceOptionsFrame then InterfaceOptionsFrame:Hide() end
     if WP.ToggleEdit then WP.ToggleEdit() end
   end)
 
-  Header("Buttons", R - 4, -206)
-  Check("WowPadOptXAttack", "X also starts auto attack",
-    "X interacts (your " .. (WowPadDB.interactKey or "F") .. " binding) and starts attacking a hostile target.",
-    R - 4, -224, function() return WowPadDB.xAttack ~= false end,
-    function(v) WowPadDB.xAttack = v; WP.RefreshInteract() end)
 
-  Header("Messages", R - 4, -258)
-  Check("WowPadOptStatus", "Show the status line", "Mode, set and context above the bar.",
-    R - 4, -276, function() return WowPadDB.showStatus == true end,
-    function(v) WowPadDB.showStatus = v; WP.UpdateStatus() end)
-  Check("WowPadOptDebug", "Debug messages in chat", nil,
-    R - 4, -300, function() return WowPadDB.debug == true end,
-    function(v) WowPadDB.debug = v end)
+  Header("Extra bars", L - 4, -206)
+  Check("WowPadOptXP", "XP / reputation bar", "WowPad's own XP and reputation bar. Turn off to use another addon's.",
+    L - 4, -224, function() return WowPadDB.showXP ~= false end,
+    function(v) WowPadDB.showXP = v; if WP.Extra then WP.Extra.ApplyShown() end end)
+  Check("WowPadOptPet", "Pet bar", "WowPad's own pet bar (mouse). Turn off to use another addon's. Changes after combat if you're fighting.",
+    L - 4, -248, function() return WowPadDB.showPet ~= false end,
+    function(v) WowPadDB.showPet = v; if WP.Extra then WP.Extra.ApplyShown() end end)
+  Check("WowPadOptCast", "Cast bar (movable)", "WowPad's own player cast bar, movable in Edit bar layout; hides Blizzard's. "
+    .. "Turn off to get Blizzard's back, or to use another cast bar addon.",
+    L - 4, -272, function() return WowPadDB.castBar ~= false end,
+    function(v) WowPadDB.castBar = v; if WP.Extra then WP.Extra.ApplyShown() end end)
+  local note = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+  note:SetPoint("TOPLEFT", L + 26, -302)
+  note:SetJustifyH("LEFT")
+  note:SetText("Using another addon for one of these? Turn WowPad's off.")
+  target = panel
+
 end
 
-panel:SetScript("OnShow", function()
+local function OnShowPage()
   if not built then Build() end
   for _, c in ipairs(controls) do
     if c.isCheck then c:SetChecked(c.get())
     else c.loading = true; c:SetValue(c.get()); c.loading = false end
   end
   Refresh()
-end)
+end
+panel:SetScript("OnShow", OnShowPage)
+barsPanel:SetScript("OnShow", OnShowPage)
 
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_LOGIN")
@@ -197,6 +240,7 @@ ev:SetScript("OnEvent", function()
   WowPadDB = WowPadDB or {}
   for k in pairs(DLL_KEYS) do saved[k] = DllValue(k) end
   InterfaceOptions_AddCategory(panel)
+  InterfaceOptions_AddCategory(barsPanel)
 end)
 
 function WP.OpenOptions()

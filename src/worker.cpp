@@ -63,6 +63,7 @@ DWORD WINAPI Worker_Main(LPVOID) {
     const Config& cfg = Config_Get();
     Inject_SetMode((InjectMode)cfg.injectMode);
     Hooks_Start();
+    AddonSettings_Start();
     if (!Controller_Init()) {
         Log_Write("No controller backend available; worker exiting (game is unaffected).");
         return 0;
@@ -102,7 +103,6 @@ DWORD WINAPI Worker_Main(LPVOID) {
             LogChanges(s, prevButtons, logged, cfg);
             prevButtons = s.buttons;
         }
-        AddonSettings_Poll();
         Mapper_Update(s, dt);
         Sleep((DWORD)cfg.pollMs);
     }

@@ -52,15 +52,19 @@ void Signal_Up(Signal s) {
     if (!k.mods) Inject_Key(k.vk, false);
 }
 
+static void (*g_wait)(DWORD) = nullptr;
+void Signal_SetWait(void (*wait)(DWORD ms)) { g_wait = wait; }
+static void Wait(DWORD ms) { if (g_wait) g_wait(ms); else Sleep(ms); }
+
 void Signal_Tap(Signal s) {
     const SignalKey& k = kSignals[s];
-    if (k.mods & SMOD_CTRL)  { Inject_Key(VK_CONTROL, true); Sleep(5); }
-    if (k.mods & SMOD_ALT)   { Inject_Key(VK_MENU, true);    Sleep(5); }
-    if (k.mods & SMOD_SHIFT) { Inject_Key(VK_SHIFT, true);   Sleep(5); }
-    Inject_Key(k.vk, true);  Sleep(15);
+    if (k.mods & SMOD_CTRL)  { Inject_Key(VK_CONTROL, true); Wait(5); }
+    if (k.mods & SMOD_ALT)   { Inject_Key(VK_MENU, true);    Wait(5); }
+    if (k.mods & SMOD_SHIFT) { Inject_Key(VK_SHIFT, true);   Wait(5); }
+    Inject_Key(k.vk, true);  Wait(15);
     Inject_Key(k.vk, false);
-    if (k.mods) Sleep(5);
-    if (k.mods & SMOD_SHIFT) { Inject_Key(VK_SHIFT, false);  Sleep(5); }
-    if (k.mods & SMOD_ALT)   { Inject_Key(VK_MENU, false);   Sleep(5); }
+    if (k.mods) Wait(5);
+    if (k.mods & SMOD_SHIFT) { Inject_Key(VK_SHIFT, false);  Wait(5); }
+    if (k.mods & SMOD_ALT)   { Inject_Key(VK_MENU, false);   Wait(5); }
     if (k.mods & SMOD_CTRL)  { Inject_Key(VK_CONTROL, false); }
 }

@@ -204,6 +204,29 @@ function Nav.Info()
   if key then WP.Print(("L3 key %s -> %s"):format(key, tostring(GetBindingAction(key, true)))) end
 end
 
+-- Left/right click on the world map at WoW's pointer, like the mouse would.
+function Nav.MapClick(button)
+  local ok, err = pcall(function()
+    if button == "RightButton" then
+      if WorldMapZoomOutButton_OnClick then WorldMapZoomOutButton_OnClick(WorldMapZoomOutButton)
+      elseif ZoomOut then ZoomOut() end
+    elseif WorldMapButton_OnClick and WorldMapButton then
+      WorldMapButton_OnClick(WorldMapButton, "LeftButton")
+    elseif WorldMapButton and ProcessMapClick then
+      local x, y = GetCursorPosition()
+      local s = WorldMapButton:GetEffectiveScale()
+      x, y = x / s, y / s
+      local l, b, w, h = WorldMapButton:GetLeft(), WorldMapButton:GetBottom(), WorldMapButton:GetWidth(), WorldMapButton:GetHeight()
+      ProcessMapClick((x - l) / w, (b + h - y) / h)
+      if WorldMapFrame_Update then WorldMapFrame_Update() end
+    end
+  end)
+  if WowPadDB.debug or not ok then
+    WP.Print(("map %s click: %s (continent %s, zone %s)"):format(tostring(button), ok and "ok" or ("error: " .. tostring(err)),
+      tostring(GetCurrentMapContinent()), tostring(GetCurrentMapZone())))
+  end
+end
+
 local function Dressable(link)
   if not link then return false end
   if IsDressableItem then return IsDressableItem(link) and true or false end
@@ -333,11 +356,19 @@ function Nav.UpdateHints()
   if not root then focus:Hide(); hints:Hide(); return end
   if root == WP.Radial then focus:Hide(); hints:Hide(); return end -- wheel has its own hints
 
-  local link, bag = Nav.FocusedItem()
-  local y = (link and Dressable(link)) and "Preview, hold: Compare" or "hold: Compare"
-  local parts = { K:format("A", "Select"), K:format("X", "Use / Sell"), K:format("Y", y) }
-  if bag then parts[#parts + 1] = K:format("L3", "Destroy") end
-  parts[#parts + 1] = K:format("B", "Close")
+  local parts
+  if root == WorldMapFrame then
+    local onPin = Nav.byDpad and Nav.cur and Nav.cur ~= WorldMapButton
+    parts = { K:format("A", onPin and "Select" or "Zoom In"), K:format("X", onPin and "Right-click" or "Zoom Out"),
+              K:format("D-pad", "Pins"),
+              K:format("B", (GetCurrentMapContinent() or 0) > 0 and "Back" or "Close") }
+  else
+    local link, bag = Nav.FocusedItem()
+    local y = (link and Dressable(link)) and "Preview, hold: Compare" or "hold: Compare"
+    parts = { K:format("A", "Select"), K:format("X", "Use / Sell"), K:format("Y", y) }
+    if bag then parts[#parts + 1] = K:format("L3", "Destroy") end
+    parts[#parts + 1] = K:format("B", "Close")
+  end
   if #Nav.roots > 1 then
     local idx = 1
     for i, r in ipairs(Nav.roots) do if r == root then idx = i end end
@@ -395,7 +426,14 @@ function Nav.Refresh()
   local top = Nav.roots[1]
   local stillOpen = false
   for _, r in ipairs(Nav.roots) do if r == Nav.root then stillOpen = true end end
-  if top ~= lastTop or not stillOpen then Nav.root = top end -- new window on top grabs focus
+  if top ~= lastTop or not stillOpen then
+    Nav.root = top                       -- new window on top grabs focus
+    -- Start on the window's default button (as before the map cursor), not
+    -- wherever the hidden pointer happens to be (the crosshair spot).
+    Nav.byDpad = true
+    Nav.Select(nil)
+    lastMX, lastMY = GetCursorPosition()
+  end
   lastTop = top
 
   local nodes = {}
@@ -409,6 +447,7 @@ function Nav.Refresh()
   local mx, my = GetCursorPosition()
   -- (Not on the radial: it selects by stick direction instead.)
   if Nav.root ~= WP.Radial and math.abs(mx - lastMX) + math.abs(my - lastMY) > 2 then
+    Nav.byDpad = false   -- the stick moved the pointer: the map cursor follows it again
     local mf = GetMouseFocus()
     if mf and Nav.nodeSet[mf] then Nav.Select(mf) end
   end
@@ -440,7 +479,7 @@ function Nav.Move(dx, dy)
   if not Active() then return end
   Nav.Refresh()
   local nxt = Nav.cur and Pick(Nav.cur, Nav.nodes, dx, dy)
-  if nxt then Nav.Select(nxt) end
+  if nxt then Nav.Select(nxt); Nav.byDpad = true end
 end
 
 function Nav.CycleRoot(step)
@@ -461,6 +500,11 @@ function Nav.BackTarget()
   if DropDownList1 and DropDownList1:IsShown() then CloseDropDownMenus(); return nil end
   local root = Nav.root
   local name = root and root:GetName()
+  -- World map: B backs out a level (zone > continent > world), then closes.
+  if root and root == WorldMapFrame then
+    local z = WorldMapZoomOutButton
+    if z and z:IsVisible() and z:IsEnabled() and (GetCurrentMapContinent() or 0) > 0 then return z end
+  end
   if name then
     if name:find("^StaticPopup%d") then
       local b2 = _G[name .. "Button2"]
@@ -530,9 +574,17 @@ table.insert(WP.setupHooks, function()
     local b = CreateFrame("Button", name, UIParent, "SecureActionButtonTemplate")
     b:RegisterForClicks("AnyDown")
     b:SetAttribute("type", "click")
-    b:SetScript("PreClick", function(self)
+    b:SetScript("PreClick", function(self, button)
       if InCombatLockdown() then return end
       local n = Nav.cur
+      -- World map: A/X act on the map itself at the cursor (left = zoom in,
+      -- right = zoom out), unless the D-pad put the cursor on a pin/button.
+      -- Done here directly (the map isn't protected), not via a click.
+      if Nav.root == WorldMapFrame and not (Nav.byDpad and n and n ~= WorldMapButton) then
+        Nav.MapClick(button)
+        self:SetAttribute("clickbutton", nil)
+        return
+      end
       if n and n:GetObjectType() == "EditBox" then
         n:SetFocus()
         n = nil

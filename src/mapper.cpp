@@ -52,6 +52,7 @@ bool     g_walking      = false;   // we toggled the game to walk (walk/run opti
 DWORD    g_walkWantSince = 0;
 bool     g_clickHeld[2] = {};
 double   g_accX = 0, g_accY = 0;
+float    g_smX = 0, g_smY = 0;     // smoothed right stick (smooth camera option)
 int      g_heldSig[8];               // signal held per face/dpad button, -1 none
 bool     g_interactHeld = false;
 bool     g_zoom         = false;     // LB+RB held
@@ -86,9 +87,21 @@ const FaceMap kFace[8] = {
 
 bool Hyst(bool held, float v, float on, float off) { return held ? v > off : v >= on; }
 
+void TapWait(DWORD ms);
+// Camera look under Proton: WoW keeps the real pointer at the window centre.
+// "No cursor image" alone isn't proof (the addon's blank cursor on the map can
+// look the same), so camera look = no cursor AND pointer at the centre.
+bool PointerAtCentre() {
+    RECT r;
+    POINT p;
+    if (!GameWindow_ClientRectScreen(&r) || !GetCursorPos(&p)) return false;
+    long cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+    return labs(p.x - cx) <= 3 && labs(p.y - cy) <= 3;
+}
 void InitOnce() {
     if (g_initDone) return;
     for (int& h : g_heldSig) h = -1;
+    Signal_SetWait(TapWait);
     g_initDone = true;
 }
 
@@ -109,6 +122,7 @@ void ReleaseControllerState(bool tellAddon) {
     g_lt = g_rt = false;
     g_zoom = false;
     g_zoomAcc = 0;
+    g_smX = g_smY = 0;
     g_camActive = false;
     CursorHide_Set(false);
     ReleaseWarp();
@@ -311,10 +325,47 @@ void UpdateButtons(const ControllerState& s, const Config& c) {
     }
 }
 
+// Camera look keeps turning while a signal tap waits between its key events
+// (LB/RB, Start, Back... are Ctrl+Alt combos with a few ms between keys). Without
+// this the camera froze for ~40-80 ms on every such press: a visible stutter.
+const ControllerState* g_waitS = nullptr;   // set during Mapper_Update only
+const Config*          g_waitC = nullptr;
+double                 g_handled = 0;       // seconds of motion already sent during waits
+
+void CameraMotion(float x, float y, const Config& c, double dt) {
+    float mag = sqrtf(x * x + y * y);
+    if (mag <= 0.0f) return;
+    if (mag > 1.0f) { x /= mag; y /= mag; mag = 1.0f; }
+    float shaped = powf(mag, c.cursorCurve) / mag;
+    float yDir = c.cameraInvertY ? 1.0f : -1.0f;
+    g_accX += x * shaped * c.cameraSpeed * dt;
+    g_accY += y * yDir * shaped * c.cameraSpeed * dt;
+    int dx = (int)g_accX, dy = (int)g_accY;
+    g_accX -= dx; g_accY -= dy;
+    if (dx || dy) { Inject_MouseMove(dx, dy); g_movedMotion = true; }
+}
+
+void TapWait(DWORD ms) {
+    const ControllerState* s = g_waitS;
+    bool camera = s && g_waitC && g_mode == MODE_CONTROLLER && !g_pointerMode && !g_zoom &&
+                  (g_camActive || g_waitC->peekDelayMs <= 0) && (g_smX != 0.0f || g_smY != 0.0f);
+    if (!camera) { Sleep(ms); return; }
+    LARGE_INTEGER f, a, b;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&a);
+    Sleep(ms);
+    QueryPerformanceCounter(&b);
+    double el = (double)(b.QuadPart - a.QuadPart) / (double)f.QuadPart;
+    if (el > 0.1) el = 0.1;
+    CameraMotion(g_smX, g_smY, *g_waitC, el);
+    g_handled += el;
+}
+
 void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
     if (g_zoom) {
         // Zoom instead of turning: right stick up = zoom in (wheel away).
         g_accX = g_accY = 0;
+        g_smX = g_smY = 0;
         g_zoomAcc += s.ry * c.zoomSpeed * dt;
         int notches = (int)g_zoomAcc;
         g_zoomAcc -= notches;
@@ -322,6 +373,17 @@ void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
         return;
     }
     float x = s.rx, y = s.ry;
+    if (c.camSmooth && !g_pointerMode) {
+        // Smooth camera: ease the stick value (exponential, SmoothMs time
+        // constant) so turning glides between the game's frames.
+        float a = 1.0f - expf(-(float)dt * 1000.0f / c.smoothMs);
+        g_smX += (x - g_smX) * a;
+        g_smY += (y - g_smY) * a;
+        if (x == 0.0f && y == 0.0f && fabsf(g_smX) + fabsf(g_smY) < 0.02f) g_smX = g_smY = 0;
+        x = g_smX; y = g_smY;
+    } else {
+        g_smX = x; g_smY = y;
+    }
     float mag = sqrtf(x * x + y * y);
     DWORD now = GetTickCount();
     if (mag <= 0.0f) {
@@ -336,7 +398,7 @@ void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
             CURSORINFO ci = {};
             ci.cbSize = sizeof(ci);
             GetCursorInfo(&ci);
-            bool camera = ci.hCursor == nullptr ||
+            bool camera = (ci.hCursor == nullptr && PointerAtCentre()) ||
                           (g_movedMotion && p.x == g_activeStartPt.x && p.y == g_activeStartPt.y);
             if (c.logButtons)
                 Log_Write("PEEK %s (pointer %ld,%ld -> %ld,%ld, hCursor %p)", camera ? "camera: hiding cursor" : "menu: no peek",
@@ -398,13 +460,14 @@ void Mapper_Update(const ControllerState& s, double dt) {
     InitOnce();
     // wowpad.ini, adjusted by the addon's options panel
     Config c = Config_Get();
-    const AddonSettings& as = AddonSettings_Get();
+    const AddonSettings as = AddonSettings_Get();
     c.cameraSpeed *= as.camScale;
     c.cursorSpeed *= as.ptrScale;
     c.zoomSpeed   *= as.zoomScale;
     if (as.invertY >= 0)   c.cameraInvertY = as.invertY != 0;
     if (as.peekDelayMs > 0) c.peekDelayMs  = as.peekDelayMs;
     c.walkRun = as.walkRun;
+    c.camSmooth = as.camSmooth;
     GameWindow_Get();
 
     CursorHide_Install(GameWindow_Get());
@@ -439,7 +502,7 @@ void Mapper_Update(const ControllerState& s, double dt) {
     {
         CURSORINFO ci = {};
         ci.cbSize = sizeof(ci);
-        bool noCursor = GetCursorInfo(&ci) && ci.hCursor == nullptr && !CursorHide_IsOn();
+        bool noCursor = GetCursorInfo(&ci) && ci.hCursor == nullptr && !CursorHide_IsOn() && PointerAtCentre();
         if (noCursor && !g_prevNoCursor && !g_camActive && !g_pointerMode && c.peekDelayMs > 0) {
             CursorHide_Set(true);      // hide first so the hand never shows
             Sleep(20);
@@ -451,9 +514,16 @@ void Mapper_Update(const ControllerState& s, double dt) {
         g_prevNoCursor = noCursor;
     }
 
+    // Motion already sent during the last tick's tap waits isn't sent twice.
+    double handled = g_handled;
+    g_handled = 0;
+    double pdt = dt - handled;
+    if (pdt < 0) pdt = 0;
+    g_waitS = &s; g_waitC = &c;
     UpdateMovement(s, c);
     UpdateTriggers(s, c);
     UpdateButtons(s, c);
-    UpdatePointer(s, c, dt);
+    UpdatePointer(s, c, pdt);
+    g_waitS = nullptr; g_waitC = nullptr;
     g_prev = s.buttons;
 }

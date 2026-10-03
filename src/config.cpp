@@ -75,6 +75,7 @@ void Config_Load() {
         c.cameraSpeed   = ReadFloat(L"Camera", L"Speed", c.cameraSpeed, 50.0f, 10000.0f);
         c.cameraInvertY = ReadBool(L"Camera", L"InvertY", c.cameraInvertY);
         c.zoomSpeed     = ReadFloat(L"Camera", L"ZoomSpeed", c.zoomSpeed, 1.0f, 40.0f);
+        c.smoothMs      = ReadFloat(L"Camera", L"SmoothMs", c.smoothMs, 10.0f, 300.0f);
         c.peekDelayMs   = (int)GetPrivateProfileIntW(L"Camera", L"PeekDelayMs", c.peekDelayMs, g_ini);
         c.crosshairY    = (int)GetPrivateProfileIntW(L"Camera", L"CrosshairY", c.crosshairY, g_ini);
 

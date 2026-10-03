@@ -91,7 +91,7 @@ local pdriver = CreateFrame("Frame")
 pdriver:SetScript("OnUpdate", function()
   -- Only needed with the hardware cursor; WoW's software cursor already follows its pointer.
   if not (WP.pointer and WP.mode == "controller" and WowPadDB and WowPadDB.drawPointer ~= false
-          and GetCVar("gxCursor") == "1") then
+          and GetCVar("gxCursor") == "1" and not (WP.MapCursorWanted and WP.MapCursorWanted())) then
     if P:IsShown() then P:Hide() end
     return
   end

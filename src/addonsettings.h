@@ -12,7 +12,11 @@ struct AddonSettings {
     int   invertY    = -1;    // -1 = use wowpad.ini, 0/1 = override
     int   peekDelayMs = 0;    // 0 = use wowpad.ini
     bool  walkRun    = false; // walk on slight tilt, run on full tilt (experimental)
+    bool  camSmooth  = false; // smooth camera turning (experimental)
 };
 
-void                 AddonSettings_Poll();   // cheap; re-reads at most once a second when the file changed
-const AddonSettings& AddonSettings_Get();
+// Starts a background thread that re-reads the file when it changes (once a
+// second). File access under Wine can take milliseconds; doing it in the
+// controller poll loop caused a small hitch every second.
+void          AddonSettings_Start();
+AddonSettings AddonSettings_Get();   // a copy, safe from any thread

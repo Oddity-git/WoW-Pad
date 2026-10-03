@@ -38,3 +38,6 @@ extern const SignalKey kSignals[SIG_COUNT];
 void Signal_Down(Signal s);  // unmodified signals only: key held until Signal_Up
 void Signal_Up(Signal s);
 void Signal_Tap(Signal s);   // press + release, with modifiers if any
+// What Signal_Tap does while it waits between key events (default: Sleep).
+// The mapper keeps the camera turning during those few ms.
+void Signal_SetWait(void (*wait)(DWORD ms));

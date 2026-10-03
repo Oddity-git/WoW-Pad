@@ -12,6 +12,7 @@ if ! command -v i686-w64-mingw32-g++ >/dev/null; then
 fi
 
 python3 scripts/check_signals.py
+rm -f build/worker.o  # version string lives here; rebuild it every time
 make "$@"
 
 DLL=build/version.dll

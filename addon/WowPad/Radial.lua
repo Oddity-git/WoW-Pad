@@ -38,7 +38,9 @@ local PAGES = {
     { "Bar Visibility", "Interface\\Icons\\Spell_Shadow_DetectInvisibility", macro = "/run WowPad.Bar.ToggleAlways()" },
   },
 }
-local RADIUS, WEDGE = 150, 54
+local RADIUS, WEDGE = 120, 44     -- icon distance from the centre, icon size
+local WHEEL = 400                 -- wheel diameter
+local TEX = "Interface\\AddOns\\WowPad\\Textures\\"
 
 local R = CreateFrame("Frame", "WowPadRadial", UIParent)
 R:SetSize(420, 470)
@@ -49,22 +51,86 @@ R:Hide()
 WP.Radial = R
 table.insert(WP.overlays, R)
 
-local disc = R:CreateTexture(nil, "BACKGROUND")
-disc:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
-disc:SetVertexColor(0, 0, 0, 0.72)
-disc:SetSize(RADIUS * 2 + WEDGE + 40, RADIUS * 2 + WEDGE + 40)
-disc:SetPoint("CENTER", 0, 10)
+-- Wheel art (WowPad's own, scripts/make_radial_art.py): translucent wedges,
+-- bronze frame. One quarter frame and two wedge shapes, turned into place in
+-- 90 degree steps with SetTexCoord.
+local ROT = {
+  [0] = { 0, 0, 0, 1, 1, 0, 1, 1 },
+  [1] = { 0, 1, 1, 1, 0, 0, 1, 0 },   -- 90 degrees clockwise
+  [2] = { 1, 1, 1, 0, 0, 1, 0, 0 },
+  [3] = { 1, 0, 0, 0, 1, 1, 0, 1 },
+}
+local function Turn(tex, k) tex:SetTexCoord(unpack(ROT[k % 4])) end
+
+local hub = CreateFrame("Frame", nil, R)
+hub:SetSize(WHEEL, WHEEL)
+hub:SetPoint("CENTER", 0, 10)
+hub:SetFrameLevel(R:GetFrameLevel())   -- under the wedge buttons
+local FILL, FILL_SEL, GLOW = { 0.04, 0.05, 0.08, 0.62 }, { 0.30, 0.24, 0.10, 0.78 }, { 1, 0.78, 0.25, 1 }
+local fills, glows = {}, {}
+for i = 1, 8 do                       -- 1 = top, clockwise
+  local k, shape = math.floor((i - 1) / 2), (i % 2 == 1) and "0" or "45"
+  local f = hub:CreateTexture(nil, "BACKGROUND")
+  f:SetTexture(TEX .. "radial_wedge" .. shape)
+  f:SetAllPoints()
+  Turn(f, k)
+  f:SetVertexColor(unpack(FILL))
+  fills[i] = f
+  local g = hub:CreateTexture(nil, "BORDER")
+  g:SetTexture(TEX .. "radial_glow" .. shape)
+  g:SetAllPoints()
+  g:SetBlendMode("ADD")
+  Turn(g, k)
+  g:SetVertexColor(unpack(GLOW))
+  g:Hide()
+  glows[i] = g
+end
+for q, spot in ipairs({ { "TOPRIGHT", 0 }, { "BOTTOMRIGHT", 1 }, { "BOTTOMLEFT", 2 }, { "TOPLEFT", 3 } }) do
+  local t = hub:CreateTexture(nil, "ARTWORK")
+  t:SetTexture(TEX .. "radial_frame")
+  t:SetSize(WHEEL / 2, WHEEL / 2)
+  t:SetPoint(spot[1])
+  Turn(t, spot[2])
+end
+local selected
+local function Highlight(idx)
+  if idx == selected then return end
+  if selected then fills[selected]:SetVertexColor(unpack(FILL)); glows[selected]:Hide() end
+  selected = idx
+  if idx then fills[idx]:SetVertexColor(unpack(FILL_SEL)); glows[idx]:Show() end
+end
 
 local title = R:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetPoint("TOP", 0, 0)
 title:SetText("Main Menu")
-local pageText = R:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-pageText:SetPoint("TOP", title, "BOTTOM", 0, -4)
+-- LB  o o o  RB   (current page in gold)
+local pageBar = CreateFrame("Frame", nil, R)
+pageBar:SetSize(10, 14)
+pageBar:SetPoint("TOP", title, "BOTTOM", 0, -6)
+local dots = {}
+local lbText = pageBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+local rbText = pageBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+lbText:SetText("LB"); rbText:SetText("RB")
+local function LayoutDots(n)
+  local gap = 14
+  pageBar:SetWidth(n * gap)
+  for i = 1, n do
+    local d = dots[i]
+    if not d then
+      d = pageBar:CreateTexture(nil, "OVERLAY")
+      d:SetTexture(TEX .. "dot")   -- white, so the colour below shows (disc is dark)
+      d:SetSize(9, 9)
+      dots[i] = d
+    end
+    d:ClearAllPoints()
+    d:SetPoint("CENTER", pageBar, "LEFT", (i - 0.5) * gap, 0)
+  end
+  lbText:SetPoint("RIGHT", pageBar, "LEFT", -6, 0)
+  rbText:SetPoint("LEFT", pageBar, "RIGHT", 6, 0)
+end
 local hint = R:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 hint:SetPoint("BOTTOM", 0, 0)
 hint:SetText("A open    B close    LB/RB page")
-local centerLabel = R:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-centerLabel:SetPoint("CENTER", 0, 10)
 
 local wedges, page = {}, 1
 
@@ -91,7 +157,11 @@ function R.Page(step)
       w:Hide()
     end
   end
-  pageText:SetText(("LB   page %d / %d   RB"):format(page, #PAGES))
+  LayoutDots(#PAGES)
+  for i, d in ipairs(dots) do
+    if i == page then d:SetVertexColor(1, 0.82, 0.2, 1); d:SetSize(11, 11)
+    else d:SetVertexColor(0.55, 0.55, 0.55, 0.8); d:SetSize(8, 8) end
+  end
   if WP.Nav then WP.Nav.Select(nil) end
 end
 
@@ -111,15 +181,13 @@ table.insert(WP.setupHooks, function()
     local angle = math.rad(90 - (i - 1) * 45)
     local w = CreateFrame("Button", "WowPadRadialWedge" .. i, R, "SecureActionButtonTemplate")
     w:SetSize(WEDGE, WEDGE)
-    w:SetPoint("CENTER", R, "CENTER", math.cos(angle) * RADIUS, math.sin(angle) * RADIUS + 10)
+    w:SetPoint("CENTER", R, "CENTER", math.cos(angle) * RADIUS, math.sin(angle) * RADIUS + 18)
     w:RegisterForClicks("AnyUp") -- one toggle per click (Nav A uses :Click())
     w.icon = w:CreateTexture(nil, "ARTWORK")
     w.icon:SetAllPoints()
     w.label = w:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     w.label:SetPoint("TOP", w, "BOTTOM", 0, -3)
-    w:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-    w:SetScript("OnEnter", function(self) centerLabel:SetText(self.label:GetText()) end)
-    w:SetScript("OnLeave", function() centerLabel:SetText("") end)
+    w.index = i
     w:HookScript("OnClick", function() if not InCombatLockdown() then R:Hide() end end)
     wedges[i] = w
   end
@@ -131,7 +199,10 @@ end)
 -- Hold a direction to highlight that wedge; it stays selected on release.
 local hist, histN, SAMPLE_WINDOW, MIN_TRAVEL = {}, 0, 0.06, 10
 R:SetScript("OnShow", function() histN = 0 end)
+R:SetScript("OnHide", function() Highlight(nil) end)
 R:SetScript("OnUpdate", function()
+  local cur = WP.Nav and WP.Nav.cur
+  Highlight(cur and cur.index and wedges[cur.index] == cur and cur.index or nil)
   local x, y = GetCursorPosition()
   local now = GetTime()
   histN = histN + 1
