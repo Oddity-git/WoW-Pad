@@ -1,4 +1,4 @@
-# WowPad 1.0.0
+# WowPad 1.1.0
 <img width="1607" height="903" alt="image" src="https://github.com/user-attachments/assets/8fe0f72d-28ee-492f-8766-9f8e3f9f0095" />
 <img width="1607" height="903" alt="image" src="https://github.com/user-attachments/assets/414e0d42-7377-497b-8b6f-e3fb1183e59a" />
 
@@ -22,18 +22,18 @@ pad and the 2026 Steam Controller. Windows should work but is untested.
 > Using a DLL with a game is your own call. Ask your server's staff before
 > using or sharing it.
 
-## Compatibility 
-It is currently being tested which addons this is compatible with, But so far These addons have been either fixed to work or were working by default.
+## Compatibility
+It is currently being tested which addons this is compatible with, but so far
+these addons have been either fixed to work or were working by default:
 - AIO
 - Auctionator
 - Bagnon
 - Postal
 - Questie-335
 
-
 ## Download
 
-Get **WowPad-1.0.0.zip** from the
+Get **WowPad-1.1.0.zip** from the
 [Releases page](https://github.com/Oddity-git/WoW-Pad/releases) (not the green
 "Code" button: that is the source code). Unzip it and follow **Install** below.
 
@@ -83,7 +83,7 @@ that contains `Wow.exe`.
    Windows needs no setting (untested on Windows; an antivirus may question
    the DLL because it reads input and sends key presses).
 4. **Start the game.** A `wowpad.log` appears next to `Wow.exe`; its first
-   line says `wowpad 1.0.0 loaded`.
+   line says `wowpad 1.1.0 loaded`.
 
 Your WoW folder should end up like this:
 ```
@@ -141,6 +141,24 @@ any controller input switches to controller mode.
 A hint bar under the window shows what the buttons do for the selected item.
 Works with default bags and with bag addons such as Bagnon.
 
+### World map
+
+The map gets its own cursor: a gold diamond with crosshair lines, plus cursor
+and player coordinates.
+
+| Button | Does |
+|---|---|
+| Right stick | Move the cursor |
+| A | Zoom in on the zone under the cursor (on a pin: click the pin) |
+| X | Zoom out |
+| D-pad | Jump between pins and map buttons |
+| B | Back a level (zone, continent, world), then close |
+
+### Main menu (Start)
+
+A radial wheel with three pages (LB / RB). Point the right stick at a wedge
+and press A; B or Start closes it.
+
 ### X = interact
 
 X presses whatever is bound to your **F** key, plus starts auto attack on a
@@ -168,13 +186,20 @@ Esc > Interface > AddOns > WowPad (or `/wp options`). Settings marked `*`
 need **Apply** (reloads the UI).
 
 - **Sticks:** camera sensitivity, pointer speed, zoom speed, invert camera.
-- **Crosshair:** dot on/off.
-- **Controller bar:** always visible, hide Blizzard's bars, size, edit layout.
+- **Crosshair:** dot on/off, crosshair tooltips ("peek") and peek delay.
+  Keep **crosshair tooltips on**: turning it off is experimental, the camera
+  can jump after closing a window.
 - **Buttons:** X also starts auto attack.
 - **Messages:** status line, debug messages.
-- **Experimental:** walk/run by stick tilt, crosshair tooltips ("peek"),
-  peek delay. Keep **crosshair tooltips on**: with it off the camera can
-  jump after closing a menu.
+- **Experimental:** walk/run by stick tilt, smooth camera (glides the camera;
+  `[Camera] SmoothMs` in `wowpad.ini` sets how much).
+
+**WowPad > Bars** (click the `+` next to WowPad in the list):
+
+- **Controller bar:** always visible, hide Blizzard's bars, size, edit layout.
+- **Extra bars:** WowPad's own XP/reputation bar, pet bar and movable cast
+  bar. Each can be turned off, e.g. to use another addon's version instead.
+  Move and resize them in **Edit bar layout**.
 
 Advanced settings (deadzones, key names, speeds) are in `wowpad.ini` next to
 `Wow.exe`; restart the game after editing it.
@@ -204,14 +229,21 @@ Delete `version.dll` next to `Wow.exe` and the `WowPad` folder in
 too. Your `wowpad.ini` and `wowpad.log` stay
 until you delete them.
 
-
-
 ## How this was made
 
-WowPad is 100% vibe-coded. Every line of the DLL and the addon was written by Claude (Anthropic's AI) in one long conversation, while I played the game and said what I wanted: "the bar should be round", "B should back out of menus", "the hand cursor flickers when the camera stops". I tested each build in game and sent back logs, screenshots and Lua errors; Claude read them, fixed things and sent the next version. Many versions later, this is the one that plays the way I wanted.
+WowPad is 100% vibe-coded. Every line of the DLL and the addon was written by
+Claude (Anthropic's AI) in one long conversation, while I played the game and
+said what I wanted: "the bar should be round", "B should back out of menus",
+"the hand cursor flickers when the camera stops". I tested each build in game
+and sent back logs, screenshots and Lua errors; Claude read them, fixed things
+and sent the next version. Many versions later, this is the one that plays
+the way I wanted.
 
-What that means for you: the design and testing are a player's, the code is an AI's, and it has only been tested on one setup (Linux, Faugus/Proton, an Xbox-style pad and the Steam Controller). It works well for me. If something breaks on yours, open an issue with your wowpad.log and what you were doing; that's exactly how it got built.
-
+What that means for you: the design and testing are a player's, the code is
+an AI's, and it has only been tested on one setup (Linux, Faugus/Proton, an
+Xbox-style pad and the Steam Controller). It works well for me. If something
+breaks on yours, open an issue with your `wowpad.log` and what you were
+doing; that's exactly how it got built.
 
 ## Credits
 
