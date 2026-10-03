@@ -8,7 +8,9 @@ client, in the style of WoW's console version: move and look with the sticks,
 a round controller action bar on the triggers, menus you can drive with the
 D-pad, a radial main menu and a crosshair. Client-side only; nothing on the
 server changes.
-<img width="1909" height="1067" alt="image" src="https://github.com/user-attachments/assets/8bd9d174-5f0f-4230-86dd-9596a0f74682" />
+<img width="1438" height="861" alt="image" src="https://github.com/user-attachments/assets/216b429f-eb42-46eb-bd63-ce6780bfaa50" />
+
+<img width="1915" height="1085" alt="image" src="https://github.com/user-attachments/assets/8ffb7ffd-28e9-41a9-a5bc-c61bbc352df7" />
 
 It has two parts that work together:
 - `version.dll` reads the controller and sits next to `Wow.exe`;
