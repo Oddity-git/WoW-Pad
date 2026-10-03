@@ -1,4 +1,7 @@
 # WowPad 1.0.0
+<img width="1607" height="903" alt="image" src="https://github.com/user-attachments/assets/8fe0f72d-28ee-492f-8766-9f8e3f9f0095" />
+<img width="1607" height="903" alt="image" src="https://github.com/user-attachments/assets/414e0d42-7377-497b-8b6f-e3fb1183e59a" />
+
 
 Native-feel controller support for the World of Warcraft **3.3.5a (build 12340)**
 client, in the style of WoW's console version: move and look with the sticks,
