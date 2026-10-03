@@ -191,6 +191,14 @@ too. Your `wowpad.ini` and `wowpad.log` stay
 until you delete them.
 
 
+
+## How this was made
+
+WowPad is 100% vibe-coded. Every line of the DLL and the addon was written by Claude (Anthropic's AI) in one long conversation, while I played the game and said what I wanted: "the bar should be round", "B should back out of menus", "the hand cursor flickers when the camera stops". I tested each build in game and sent back logs, screenshots and Lua errors; Claude read them, fixed things and sent the next version. Many versions later, this is the one that plays the way I wanted.
+
+What that means for you: the design and testing are a player's, the code is an AI's, and it has only been tested on one setup (Linux, Faugus/Proton, an Xbox-style pad and the Steam Controller). It works well for me. If something breaks on yours, open an issue with your wowpad.log and what you were doing; that's exactly how it got built.
+
+
 ## Credits
 
 - WowPad: made for a private AzerothCore setup, with Claude (Anthropic).
