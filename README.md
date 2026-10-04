@@ -240,7 +240,7 @@ Chat commands: `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp bar`,
 
 
 ## Planned / TODO
-
+- radial menu customization, currently on steam deck if you max out UI scale the radial goes off screen a bit
 - Turning crosshair tooltips (peek) off without the camera jumping after
   closing a window.
 - Assigning action bar slots with the controller (picking from the
