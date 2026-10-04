@@ -362,12 +362,18 @@ function Nav.UpdateHints()
     parts = { K:format("A", onPin and "Select" or "Zoom In"), K:format("X", onPin and "Right-click" or "Zoom Out"),
               K:format("D-pad", "Pins"),
               K:format("B", (GetCurrentMapContinent() or 0) > 0 and "Back" or "Close") }
+  elseif root == MerchantFrame then
+    -- Vendor: always show what X/Y do, so you know before hovering anything.
+    parts = { K:format("A", "Select"), K:format("X", "Buy"), K:format("Y", "Preview, hold: Compare"),
+              K:format("B", "Close") }
+  elseif InBags(root) then
+    -- Bags (default, bank, bag addons): X/Y/L3 always listed.
+    local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
+    parts = { K:format("A", "Select"), K:format("X", vendorOpen and "Sell" or "Use"),
+              K:format("Y", "Preview, hold: Compare"), K:format("L3", "Destroy"), K:format("B", "Close") }
   else
-    local link, bag = Nav.FocusedItem()
-    local y = (link and Dressable(link)) and "Preview, hold: Compare" or "hold: Compare"
-    parts = { K:format("A", "Select"), K:format("X", "Use / Sell"), K:format("Y", y) }
-    if bag then parts[#parts + 1] = K:format("L3", "Destroy") end
-    parts[#parts + 1] = K:format("B", "Close")
+    -- Everything else: only what applies everywhere.
+    parts = { K:format("A", "Select"), K:format("B", "Close") }
   end
   if #Nav.roots > 1 then
     local idx = 1

@@ -205,20 +205,32 @@ local function Build()
 
 
   Header("Extra bars", L - 4, -206)
-  Check("WowPadOptXP", "XP / reputation bar", "WowPad's own XP and reputation bar. Turn off to use another addon's.",
+  Check("WowPadOptXP", "XP bar", "WowPad's own XP bar. Turn off to use another addon's.",
     L - 4, -224, function() return WowPadDB.showXP ~= false end,
     function(v) WowPadDB.showXP = v; if WP.Extra then WP.Extra.ApplyShown() end end)
+  Check("WowPadOptRep", "Reputation bar", "WowPad's own reputation bar (the faction you watch). Turn off to use another addon's.",
+    L - 4, -248, function() return WowPadDB.showRep ~= false end,
+    function(v) WowPadDB.showRep = v; if WP.Extra then WP.Extra.ApplyShown() end end)
   Check("WowPadOptPet", "Pet bar", "WowPad's own pet bar (mouse). Turn off to use another addon's. Changes after combat if you're fighting.",
-    L - 4, -248, function() return WowPadDB.showPet ~= false end,
+    L - 4, -272, function() return WowPadDB.showPet ~= false end,
     function(v) WowPadDB.showPet = v; if WP.Extra then WP.Extra.ApplyShown() end end)
   Check("WowPadOptCast", "Cast bar (movable)", "WowPad's own player cast bar, movable in Edit bar layout; hides Blizzard's. "
     .. "Turn off to get Blizzard's back, or to use another cast bar addon.",
-    L - 4, -272, function() return WowPadDB.castBar ~= false end,
+    L - 4, -296, function() return WowPadDB.castBar ~= false end,
     function(v) WowPadDB.castBar = v; if WP.Extra then WP.Extra.ApplyShown() end end)
   local note = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-  note:SetPoint("TOPLEFT", L + 26, -302)
+  note:SetPoint("TOPLEFT", L + 26, -326)
   note:SetJustifyH("LEFT")
   note:SetText("Using another addon for one of these? Turn WowPad's off.")
+
+  Header("Minimap", L - 4, -350)
+  Check("WowPadOptMinimap", "Minimap button", "Left-click: Edit bar layout. Right-click: these options. Drag it around the minimap.",
+    L - 4, -368, function() return not (WowPadDB.minimap and WowPadDB.minimap.hide) end,
+    function(v)
+      WowPadDB.minimap = WowPadDB.minimap or {}
+      WowPadDB.minimap.hide = not v
+      if WP.UpdateMinimapButton then WP.UpdateMinimapButton() end
+    end)
   target = panel
 
 end

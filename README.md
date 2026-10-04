@@ -1,12 +1,12 @@
-# WowPad 1.1.0
+# WowPad 1.2.0
 <img width="1607" height="903" alt="image" src="https://github.com/user-attachments/assets/8fe0f72d-28ee-492f-8766-9f8e3f9f0095" />
 <img width="1607" height="903" alt="image" src="https://github.com/user-attachments/assets/414e0d42-7377-497b-8b6f-e3fb1183e59a" />
 
 
 Native-feel controller support for the World of Warcraft **3.3.5a (build 12340)**
-client, in the style of WoW Forever: move and look with the sticks,
-a round controller action bar on the triggers, menus you can drive with the
-D-pad, a radial main menu and a crosshair. Client-side only; nothing on the
+client, resembling WoW Forever's controller support: move and look with the
+sticks, a round controller action bar on the triggers, menus you can drive with
+the D-pad, a radial main menu and a crosshair. Client-side only; nothing on the
 server changes.
 <img width="1438" height="861" alt="image" src="https://github.com/user-attachments/assets/216b429f-eb42-46eb-bd63-ce6780bfaa50" />
 
@@ -33,7 +33,7 @@ these addons have been either fixed to work or were working by default:
 
 ## Download
 
-Get **WowPad-1.1.0.zip** from the
+Get **WowPad-1.2.0.zip** from the
 [Releases page](https://github.com/Oddity-git/WoW-Pad/releases) (not the green
 "Code" button: that is the source code). Unzip it and follow **Install** below.
 
@@ -83,7 +83,7 @@ that contains `Wow.exe`.
    Windows needs no setting (untested on Windows; an antivirus may question
    the DLL because it reads input and sends key presses).
 4. **Start the game.** A `wowpad.log` appears next to `Wow.exe`; its first
-   line says `wowpad 1.1.0 loaded`.
+   line says `wowpad 1.2.0 loaded`.
 
 Your WoW folder should end up like this:
 ```
@@ -97,10 +97,12 @@ Interface/AddOns/WowPad/   (or interface/addons/WowPad on Linux)
 
 1. Esc > Video > **Hardware Cursor** on.
 2. Pick up the controller: WowPad switches to controller mode by itself.
-3. Start > page 3 > **Edit Bar** (or `/wp edit`): drag spells, items, macros
-   and mounts onto the round slots. Drag the bar to move it, mouse wheel to
-   resize. `/wp edit` again to finish.
-4. Esc > Interface > AddOns > **WowPad** for sensitivity and other options.
+3. Left-click the **gamepad button on the minimap** (or Start > page 3 >
+   **Edit Bar**, or `/wp edit`): drag spells, items, macros and mounts onto
+   the round slots. Drag bars to move them (they snap to the screen's centre
+   line; pull further to let go), mouse wheel to resize. Click again to finish.
+4. Right-click the minimap button (or Esc > Interface > AddOns > **WowPad**)
+   for sensitivity and other options.
 
 
 ## Controls
@@ -197,9 +199,11 @@ need **Apply** (reloads the UI).
 **WowPad > Bars** (click the `+` next to WowPad in the list):
 
 - **Controller bar:** always visible, hide Blizzard's bars, size, edit layout.
-- **Extra bars:** WowPad's own XP/reputation bar, pet bar and movable cast
-  bar. Each can be turned off, e.g. to use another addon's version instead.
-  Move and resize them in **Edit bar layout**.
+- **Extra bars:** WowPad's own XP bar, reputation bar, pet bar and movable
+  cast bar. Each can be turned off, e.g. to use another addon's version
+  instead. Move and resize them in **Edit bar layout**.
+- **Minimap:** show or hide the minimap button (left-click: edit layout,
+  right-click: options, drag to move it around the minimap).
 
 Advanced settings (deadzones, key names, speeds) are in `wowpad.ini` next to
 `Wow.exe`; restart the game after editing it.
@@ -218,8 +222,22 @@ Chat commands: `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp bar`,
 - **Camera jumps after closing a menu:** turn crosshair tooltips (peek) on.
 - **X doesn't interact:** `/wp interact` shows what F is bound to.
 - **A Lua error mentions WowPad:** send the error text and `wowpad.log`.
+- **Crosshair stuck somewhere other than its usual spot:** press R3 twice
+  (pointer mode on, then off). That puts it back.
 - **Stuck input / something odd:** hold Back + Start for 1 second (kill
   switch), or touch the mouse/keyboard.
+
+
+## Planned / TODO
+
+- Turning crosshair tooltips (peek) off without the camera jumping after
+  closing a window.
+- Assigning action bar slots with the controller (picking from the
+  spellbook) instead of dragging with the mouse.
+- Testing on Windows.
+- Steam Controller extras: trackpads, gyro and back buttons.
+
+Have an idea or found a bug? Open an issue with your `wowpad.log`.
 
 
 ## Uninstall

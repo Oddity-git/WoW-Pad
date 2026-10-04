@@ -432,3 +432,31 @@ WoW-Forever-style wheel (user's screenshots): 8 translucent dark wedges, bronze 
 
 ## 1.0.10 (addon only, test): radial page dots light up
 Dots used Textures/disc (dark), so the gold tint never showed. Now Textures/dot (white): current page gold and larger, others grey.
+
+## 1.1.1 (addon only, test): minimap button + soft snap
+- Minimap button (own gamepad icon, Textures/minimap.tga ~7 KB, scripts/make_minimap_icon.py): left-click Edit bar layout, right-click Options, drag around the minimap (WowPadDB.minimap.angle). Options > Bars > Minimap button (default on).
+- Edit mode drag (controller bar, XP, pet, cast bar) uses Snap.lua: within 12 UI px of the screen's vertical centre the bar's centre locks to it and a gold guide line shows; pulling further releases. Vertical position free.
+- [ ] Button sits on the minimap edge, tooltip shows, clicks work, drag moves it, position kept after /reload. Option hides/shows it.
+- [ ] Drag each bar across the middle: snaps with guide line, can be pulled off, saved position stays centred after /reload.
+
+## 1.1.2 (addon only, test): separate rounded XP and reputation bars
+- XP and reputation are separate holders ("xp", "rep"), each movable/scalable with centre snap, own toggles (Options > Bars: XP bar, Reputation bar; default on). Rep starts just above the XP bar until moved. XP holder is only the bar's height, so it can sit flush on the bottom edge.
+- Rounded style: half-disc caps (Textures/barcap, barcapring; scripts/make_bar_caps.py, ~6 KB) + flat middle, thin bronze outline; fill shows its left cap once there's progress and its right cap when full. Rested XP is a translucent blue fill under the XP fill. Cast bar unchanged.
+- [ ] Both bars rounded, text readable; XP fill/rested correct; rep colour by standing.
+- [ ] Drag XP to the very bottom edge; rep moves independently; toggles hide each.
+
+## 1.1.3 (addon only, test): hint bar per window
+Bags (default, bank, bag addons): A Select, X Use (Sell with a vendor open), Y Preview/hold Compare, L3 Destroy, B Close - always, without hovering. Vendor list: A Select, X Buy, Y Preview/Compare, B Close. Every other window: A Select, B Close. Map unchanged; LB/RB switch hint when several windows are open.
+- [ ] Talents, spellbook, quest log, game menu: only A/B. Bags and vendor: full set.
+
+## 1.1.4 (addon only, test): D-pad slot arrows
+One arrow glyph (Textures/dpadarrow, scripts/make_dpad_arrow.py, 1.5 KB) turned per direction; on its own child frame above ring/cooldown. Over a skill: small, bottom-right corner (like A/B/X/Y); empty slot: big, centred.
+- [ ] Arrows visible on assigned D-pad slots, all four the same style.
+
+## 1.1.5 (addon only, test): press feedback
+Blizzard-style recess when a slot fires: icon inset 2 px and darkened to 55% for 0.12 s, then back (usable tint restored). Slots: PostClick hook. Fixed default-set face buttons: A = hooksecurefunc JumpOrAscendStart, X = StartAttack / WowPadNoop, B = WowPadBackButton, Y = WowPadUnitMenu (controller mode, default set only).
+- [ ] Press D-pad and trigger-set slots: each icon dips. A jump, B clear target, X attack, Y menu: top-cluster icons dip.
+- [ ] Works in combat, no Lua errors.
+
+## 1.1.6 (addon only, test): slot press feedback fix
+Slots set their own PostClick later in MakeSlot, which replaced the hook; the press now runs inside that handler.

@@ -41,11 +41,12 @@ local function RoundIcon(tex, path)
   if path then SetPortraitToTexture(tex, path) else tex:SetTexture(nil) end
 end
 local FACE_LABEL = { [5] = "|cff55dd55A|r", [6] = "|cffff5555B|r", [7] = "|cff5599ffX|r", [8] = "|cffffdd33Y|r" }
+-- One arrow (Textures/dpadarrow, points up) turned per direction with SetTexCoord.
 local DPAD_ARROW = {
-  [1] = "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up",
-  [2] = "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up",
-  [3] = "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up",
-  [4] = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up",
+  [1] = { 0, 0, 0, 1, 1, 0, 1, 1 },   -- up
+  [2] = { 1, 1, 1, 0, 0, 1, 0, 0 },   -- down (180)
+  [3] = { 1, 0, 0, 0, 1, 1, 0, 1 },   -- left (90 counter-clockwise)
+  [4] = { 0, 1, 1, 1, 0, 0, 1, 0 },   -- right (90 clockwise)
 }
 -- Default set face buttons are fixed functions (display only).
 local FIXED = {
@@ -121,8 +122,10 @@ local function UpdateButton(btn)
   Shown(btn.empty, icon == nil)
   if btn.glyph then
     btn.glyph:ClearAllPoints()
-    if icon then btn.glyph:SetSize(13, 13); btn.glyph:SetPoint("TOPRIGHT", 2, 2)
-    else btn.glyph:SetSize(20, 20); btn.glyph:SetPoint("CENTER") end
+    -- like the A/B/X/Y letters: small in the bottom-right corner over a skill,
+    -- big in the middle of an empty slot
+    if icon then btn.glyph:SetSize(12, 12); btn.glyph:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+    else btn.glyph:SetSize(18, 18); btn.glyph:SetPoint("CENTER", btn, "CENTER") end
   end
   if btn.letter then
     btn.letter:ClearAllPoints()
@@ -373,6 +376,55 @@ local function AddOutline(parent, set)
   table.insert(clusters[set].outlines, o)
 end
 
+---------------------------------------------------------------------------
+-- Press feedback (Blizzard-style "recess"): the icon sinks in and darkens for
+-- a moment whenever the slot fires. Visual only: textures, so fine in combat.
+---------------------------------------------------------------------------
+local PRESS_TIME, PRESS_INSET, PRESS_DARK = 0.12, 2, 0.55
+local pressed = {}
+local pressDriver = CreateFrame("Frame")
+pressDriver:Hide()
+local function Release(btn)
+  pressed[btn] = nil
+  btn.icon:ClearAllPoints()
+  btn.icon:SetAllPoints(btn)
+  if btn.data then UpdateButton(btn) else btn.icon:SetVertexColor(1, 1, 1) end  -- back to its usable tint
+end
+pressDriver:SetScript("OnUpdate", function(self, e)
+  local any = false
+  for btn, t in pairs(pressed) do
+    t = t - e
+    if t <= 0 then Release(btn) else pressed[btn] = t; any = true end
+  end
+  if not any then self:Hide() end
+end)
+function Bar.Press(btn)
+  if not btn or not btn.icon or not btn:IsVisible() then return end
+  btn.icon:ClearAllPoints()
+  btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", PRESS_INSET, -PRESS_INSET)
+  btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PRESS_INSET, PRESS_INSET)
+  local r, g, b = btn.icon:GetVertexColor()
+  btn.icon:SetVertexColor(r * PRESS_DARK, g * PRESS_DARK, b * PRESS_DARK)
+  pressed[btn] = PRESS_TIME
+  pressDriver:Show()
+end
+
+-- The fixed A/B/X/Y of the default set aren't buttons that get clicked, so
+-- watch what they trigger: jump, start attack, our back / target menu buttons.
+local function HookFixedPresses()
+  local function F(i) return function() if WP.mode == "controller" and WP.set == 0 then Bar.Press(Bar.fixedFrames and Bar.fixedFrames[i]) end end end
+  if not Bar.hookedJump then
+    Bar.hookedJump = true
+    if JumpOrAscendStart then hooksecurefunc("JumpOrAscendStart", F(5)) end
+    if StartAttack then hooksecurefunc("StartAttack", F(7)) end
+  end
+  for i, name in pairs({ [6] = "WowPadBackButton", [7] = "WowPadNoop", [8] = "WowPadUnitMenu" }) do
+    local b = _G[name]
+    if b and not b.wpPressHooked then b.wpPressHooked = true; b:HookScript("PostClick", F(i)) end
+  end
+end
+Bar.HookFixedPresses = HookFixedPresses
+
 local function MakeFixed(c, i)
   local f = CreateFrame("Button", nil, c)
   f:SetSize(SIZE, SIZE)
@@ -389,6 +441,9 @@ local function MakeFixed(c, i)
   label:SetText(FACE_LABEL[i])
   AddOutline(f, 0)
   f.fixed = FIXED[i][2]
+  f.icon = tex
+  Bar.fixedFrames = Bar.fixedFrames or {}
+  Bar.fixedFrames[i] = f
   f:SetScript("OnEnter", ShowTooltip)
   f:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
@@ -421,8 +476,13 @@ local function MakeSlot(c, set, i)
   local hotkey = _G[name .. "HotKey"]
   if hotkey then hotkey:SetText(""); hotkey:Hide() end
   if DPAD_ARROW[i] then
-    btn.glyph = btn:CreateTexture(nil, "OVERLAY")
-    btn.glyph:SetTexture(DPAD_ARROW[i])
+    -- on its own child frame so it always draws above the ring and cooldown
+    local gf = CreateFrame("Frame", nil, btn)
+    gf:SetAllPoints()
+    gf:SetFrameLevel(btn:GetFrameLevel() + 4)
+    btn.glyph = gf:CreateTexture(nil, "OVERLAY")
+    btn.glyph:SetTexture(TEX .. "dpadarrow")
+    btn.glyph:SetTexCoord(unpack(DPAD_ARROW[i]))
   else
     btn.letter = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     btn.letter:SetText(FACE_LABEL[i])
@@ -441,6 +501,7 @@ local function MakeSlot(c, set, i)
   end)
   btn:SetScript("PostClick", function(self, mouse)
     self:SetChecked(false)
+    if not Bar.editing then Bar.Press(self) end   -- press feedback (before the combat return)
     if InCombatLockdown() then return end
     if GetCursorInfo() then OnReceiveDrag(self)
     elseif Bar.editing and mouse == "RightButton" then SetSlot(self, nil)
@@ -456,8 +517,8 @@ table.insert(WP.setupHooks, function()
   bar:SetMovable(true)
   bar:SetClampedToScreen(true)
   bar:RegisterForDrag("LeftButton")
-  bar:SetScript("OnDragStart", function(self) if Bar.editing then self:StartMoving() end end)
-  bar:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); SavePosition() end)
+  bar:SetScript("OnDragStart", function(self) if Bar.editing then WP.SnapDragStart(self) end end)
+  bar:SetScript("OnDragStop", function(self) WP.SnapDragStop(); SavePosition() end)
   bar:SetScript("OnMouseWheel", function(_, delta)
     if Bar.editing then Bar.SetScale(((WowPadDB.bar and WowPadDB.bar.scale) or 1) + delta * 0.05) end
   end)
@@ -488,7 +549,13 @@ table.insert(WP.setupHooks, function()
 
   Bar.Load()
   Bar.HighlightSet(WP.set)
+  HookFixedPresses()
 end)
+
+-- Some of the buttons the fixed A/B/X/Y watch are made by other files' setup.
+local pressHookEv = CreateFrame("Frame")
+pressHookEv:RegisterEvent("PLAYER_ENTERING_WORLD")
+pressHookEv:SetScript("OnEvent", function() if Bar.frame then HookFixedPresses() end end)
 
 ---------------------------------------------------------------------------
 -- Events

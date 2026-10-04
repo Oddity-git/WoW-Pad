@@ -48,9 +48,9 @@ local function MakeMover(holder, label)
   t:SetText(label .. "  (drag / wheel)")
   m:EnableMouse(true)
   m:RegisterForDrag("LeftButton")
-  m:SetScript("OnDragStart", function() if not InCombatLockdown() then holder:StartMoving() end end)
+  m:SetScript("OnDragStart", function() WP.SnapDragStart(holder) end)
   m:SetScript("OnDragStop", function()
-    holder:StopMovingOrSizing()
+    WP.SnapDragStop()
     local x, y = holder:GetCenter()
     local p = DB(holder.key)
     p.x, p.y = x, y
@@ -83,18 +83,83 @@ end
 ---------------------------------------------------------------------------
 -- XP + reputation bar
 ---------------------------------------------------------------------------
-local XP_W, XP_H, REP_H = 520, 12, 8
-local xpHolder, xpBar, restBar, xpText, repBar, repText
+local XP_W, XP_H, REP_H = 520, 12, 9
+local xpHolder, repHolder, xpBar, restBar, xpText, repBar, repText
 
-local function StatusBar(parent, r, g, b)
-  local s = CreateFrame("StatusBar", nil, parent)
-  s:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-  s:SetStatusBarColor(r, g, b)
-  s:SetMinMaxValues(0, 1)
-  local bg = s:CreateTexture(nil, "BACKGROUND")
-  bg:SetTexture(0, 0, 0, 0.55)
-  bg:SetAllPoints()
-  return s
+-- Rounded bar: half-disc caps (Textures/barcap, mirrored on the right) + flat
+-- middle, a thin bronze outline, and a fill whose left cap shows once there is
+-- any progress and whose right cap shows when full.
+local CAP = "Interface\\AddOns\\WowPad\\Textures\\barcap"
+local RING = "Interface\\AddOns\\WowPad\\Textures\\barcapring"
+local FLAT = "Interface\\Buttons\\WHITE8X8"
+local EDGE = { 0.72, 0.56, 0.33, 1 }
+local function RoundBar(parent, w, h, r, g, b)
+  local f = CreateFrame("Frame", nil, parent)
+  f:SetSize(w, h)
+  local cw = h / 2
+  local function Cap(frame, layer, tex, side, color)
+    local t = frame:CreateTexture(nil, layer)
+    t:SetTexture(tex)
+    t:SetSize(cw, h)
+    t:SetPoint(side)
+    if side == "RIGHT" then t:SetTexCoord(1, 0, 0, 1) end
+    if color then t:SetVertexColor(unpack(color)) end
+    return t
+  end
+  local function Mid(frame, layer)
+    local t = frame:CreateTexture(nil, layer)
+    t:SetPoint("TOPLEFT", cw, 0)
+    t:SetPoint("BOTTOMRIGHT", -cw, 0)
+    return t
+  end
+  local dark = { 0, 0, 0, 0.6 }
+  Cap(f, "BACKGROUND", CAP, "LEFT", dark); Cap(f, "BACKGROUND", CAP, "RIGHT", dark)
+  Mid(f, "BACKGROUND"):SetTexture(0, 0, 0, 0.6)
+
+  local function Fill(level, cr, cg, cb, alpha)
+    local s = CreateFrame("StatusBar", nil, f)
+    s:SetPoint("TOPLEFT", cw, 0)
+    s:SetPoint("BOTTOMRIGHT", -cw, 0)
+    s:SetFrameLevel(f:GetFrameLevel() + level)
+    s:SetStatusBarTexture(FLAT)
+    s:SetMinMaxValues(0, 1)
+    s:SetValue(0)
+    s.capL = Cap(s, "ARTWORK", CAP, "LEFT")
+    s.capL:ClearAllPoints(); s.capL:SetPoint("RIGHT", s, "LEFT")
+    s.capR = Cap(s, "ARTWORK", CAP, "RIGHT")
+    s.capR:ClearAllPoints(); s.capR:SetPoint("LEFT", s, "RIGHT")
+    function s:SetColor(cr2, cg2, cb2)
+      self:SetStatusBarColor(cr2, cg2, cb2, alpha)
+      self.capL:SetVertexColor(cr2, cg2, cb2, alpha)
+      self.capR:SetVertexColor(cr2, cg2, cb2, alpha)
+    end
+    function s:SetProgress(max, v)
+      max = math.max(max, 1)
+      v = math.max(0, math.min(v, max))
+      self:SetMinMaxValues(0, max)
+      self:SetValue(v)
+      if v > 0 then self.capL:Show() else self.capL:Hide() end
+      if v >= max then self.capR:Show() else self.capR:Hide() end
+    end
+    s:SetColor(cr, cg, cb)
+    return s
+  end
+  f.Fill = Fill
+
+  local edge = CreateFrame("Frame", nil, f)
+  edge:SetAllPoints()
+  edge:SetFrameLevel(f:GetFrameLevel() + 5)
+  Cap(edge, "OVERLAY", RING, "LEFT", EDGE); Cap(edge, "OVERLAY", RING, "RIGHT", EDGE)
+  local lw = math.max(1, h * 6 / 64)
+  local top = edge:CreateTexture(nil, "OVERLAY")
+  top:SetTexture(unpack(EDGE)); top:SetHeight(lw)
+  top:SetPoint("TOPLEFT", cw, 0); top:SetPoint("TOPRIGHT", -cw, 0)
+  local bot = edge:CreateTexture(nil, "OVERLAY")
+  bot:SetTexture(unpack(EDGE)); bot:SetHeight(lw)
+  bot:SetPoint("BOTTOMLEFT", cw, 0); bot:SetPoint("BOTTOMRIGHT", -cw, 0)
+  f.text = edge:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  f.text:SetPoint("CENTER", 0, 0)
+  return f
 end
 
 local function AtMaxLevel()
@@ -105,61 +170,54 @@ end
 
 local function On(key) return WowPadDB[key] ~= false end
 
+local function Editing(holder) return holder.mover and holder.mover:IsShown() end
+
 function Extra.UpdateXP()
   if not xpHolder then return end
-  if not On("showXP") then xpHolder:Hide(); return end
-  local showXP = not AtMaxLevel()
-  local name, reaction, minV, maxV, value = GetWatchedFactionInfo()
-  local showRep = name ~= nil
-
-  if showXP then
+  -- XP
+  if On("showXP") and not AtMaxLevel() then
     local cur, max, rested = UnitXP("player"), UnitXPMax("player"), GetXPExhaustion() or 0
     max = math.max(max, 1)
-    xpBar:SetMinMaxValues(0, max); xpBar:SetValue(cur)
-    restBar:SetMinMaxValues(0, max); restBar:SetValue(math.min(cur + rested, max))
+    xpBar:SetProgress(max, cur)
+    restBar:SetProgress(max, cur + rested)
     xpText:SetText(("Level %d   %d / %d  (%d%%)%s"):format(UnitLevel("player"), cur, max,
                    math.floor(cur / max * 100), rested > 0 and ("   rested " .. rested) or ""))
-    xpBar:Show(); restBar:Show()
-  else
-    xpBar:Hide(); restBar:Hide(); xpText:SetText("")
+    xpHolder:Show()
+  elseif not Editing(xpHolder) then
+    xpHolder:Hide()
   end
-
-  if showRep then
+  -- Reputation
+  local name, reaction, minV, maxV, value = GetWatchedFactionInfo()
+  if On("showRep") and name then
     local span = math.max(maxV - minV, 1)
-    repBar:SetMinMaxValues(0, span); repBar:SetValue(value - minV)
+    repBar:SetProgress(span, value - minV)
     local c = FACTION_BAR_COLORS and FACTION_BAR_COLORS[reaction]
-    if c then repBar:SetStatusBarColor(c.r, c.g, c.b) end
+    if c then repBar:SetColor(c.r, c.g, c.b) end
     repText:SetText(("%s   %d / %d"):format(name, value - minV, span))
-    repBar:Show()
-  else
-    repBar:Hide(); repText:SetText("")
+    repHolder:Show()
+  elseif not Editing(repHolder) then
+    repHolder:Hide()
   end
-
-  -- Rep sits under XP, or alone in XP's place at max level.
-  repBar:ClearAllPoints()
-  if showXP then repBar:SetPoint("TOPLEFT", xpBar, "BOTTOMLEFT", 0, -2); repBar:SetPoint("TOPRIGHT", xpBar, "BOTTOMRIGHT", 0, -2)
-  else repBar:SetPoint("TOPLEFT", xpHolder, "TOPLEFT"); repBar:SetPoint("TOPRIGHT", xpHolder, "TOPRIGHT") end
-  if xpHolder.mover:IsShown() then return end -- keep full size while editing
-  if showXP or showRep then xpHolder:Show() else xpHolder:Hide() end
 end
 
 local function BuildXP()
-  xpHolder = MakeHolder("WowPadXPBar", "xp", XP_W, XP_H + REP_H + 2, { "BOTTOM", UIParent, "BOTTOM", 0, 4 })
-  restBar = StatusBar(xpHolder, 0.0, 0.39, 0.88)
-  restBar:SetAlpha(0.6)
-  restBar:SetPoint("TOPLEFT"); restBar:SetPoint("TOPRIGHT"); restBar:SetHeight(XP_H)
-  xpBar = StatusBar(xpHolder, 0.58, 0.0, 0.55)
-  xpBar:SetFrameLevel(restBar:GetFrameLevel() + 1)
-  xpBar:SetAllPoints(restBar)
-  xpText = xpBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  xpText:SetPoint("CENTER")
-  repBar = StatusBar(xpHolder, 0, 0.6, 0.1)
-  repBar:SetHeight(REP_H)
-  repText = repBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  repText:SetPoint("CENTER", 0, 0)
-  repText:SetFont(repText:GetFont(), 9)
-  MakeMover(xpHolder, "XP / Reputation")
+  xpHolder = MakeHolder("WowPadXPBar", "xp", XP_W, XP_H, { "BOTTOM", UIParent, "BOTTOM", 0, 2 })
+  local xp = RoundBar(xpHolder, XP_W, XP_H)
+  xp:SetAllPoints()
+  restBar = xp.Fill(1, 0.0, 0.39, 0.88, 0.55)
+  xpBar = xp.Fill(2, 0.58, 0.0, 0.55, 1)
+  xpText = xp.text
+  MakeMover(xpHolder, "XP")
   ApplyPos(xpHolder)
+
+  repHolder = MakeHolder("WowPadRepBar", "rep", XP_W, REP_H, { "BOTTOM", xpHolder, "TOP", 0, 4 })
+  local rep = RoundBar(repHolder, XP_W, REP_H)
+  rep:SetAllPoints()
+  repBar = rep.Fill(1, 0, 0.6, 0.1, 1)
+  repText = rep.text
+  repText:SetFont(repText:GetFont(), 9)
+  MakeMover(repHolder, "Reputation")
+  ApplyPos(repHolder)
   Extra.UpdateXP()
 end
 
@@ -403,7 +461,7 @@ end
 ---------------------------------------------------------------------------
 function Extra.SetEditing(on)
   if InCombatLockdown() then return end
-  local enabled = { xp = On("showXP"), pet = On("showPet"), cast = On("castBar") }
+  local enabled = { xp = On("showXP"), rep = On("showRep"), pet = On("showPet"), cast = On("castBar") }
   for _, m in ipairs(movers) do
     local holder = m.holder
     if on and enabled[holder.key] then m:Show() else m:Hide() end
@@ -416,8 +474,10 @@ function Extra.SetEditing(on)
       RegisterStateDriver(petHolder, "visibility", "[pet] show; hide")
     end
   end
-  if xpHolder and enabled.xp then
-    if on then xpHolder:Show() else Extra.UpdateXP() end
+  if xpHolder then
+    if on and enabled.xp then xpHolder:Show() end
+    if on and enabled.rep then repHolder:Show() end
+    if not on then Extra.UpdateXP() end
   end
   if castBar and enabled.cast and not (castBar.casting or castBar.channeling) then
     if on then   -- preview, so you can see what you're placing

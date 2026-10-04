@@ -4,9 +4,9 @@
 
 
 Native-feel controller support for the World of Warcraft **3.3.5a (build 12340)**
-client, in the style of WoW's console version: move and look with the sticks,
-a round controller action bar on the triggers, menus you can drive with the
-D-pad, a radial main menu and a crosshair. Client-side only; nothing on the
+client, resembling WoW Forever's controller support: move and look with the
+sticks, a round controller action bar on the triggers, menus you can drive with
+the D-pad, a radial main menu and a crosshair. Client-side only; nothing on the
 server changes.
 <img width="1438" height="861" alt="image" src="https://github.com/user-attachments/assets/216b429f-eb42-46eb-bd63-ce6780bfaa50" />
 
