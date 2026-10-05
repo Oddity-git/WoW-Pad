@@ -13,12 +13,6 @@ server changes.
 <p align="center">Full D-Pad Menu Navigation</p>
 <img width="1910" height="891" alt="image" src="https://github.com/user-attachments/assets/8f643d12-50d5-40cc-ac97-765e88f880cd" />
 
-<p align="center">Radial menu tied to right stick movement selection</p>
-<img width="1913" height="1075" alt="image" src="https://github.com/user-attachments/assets/d7ccb686-51ae-4688-9ced-95b79016fdbc" />
-
-<p align="center">Proper Mini Map cursor</p>
-<img width="1224" height="810" alt="image" src="https://github.com/user-attachments/assets/0a0acb75-8201-4eab-af09-96ef0768e864" />
-
 <p align="center">Edit Mode with center line snapping</p>
 <img width="1398" height="685" alt="image" src="https://github.com/user-attachments/assets/40645374-f35d-4e4f-9b0b-350db39f92c5" />
 
@@ -181,6 +175,9 @@ is over.
 
 ### Chat: on-screen keyboard
 
+<img width="599" height="544" alt="image" src="https://github.com/user-attachments/assets/0b38c8f2-ec1d-4d2f-85b7-f8376c1dabd4" />
+
+
 **Back + A** opens a small keyboard above the chat window (controller mode, out
 of combat). It's meant for short messages and commands like `/reload`; a real
 keyboard (or the Steam Deck's) works as usual.
@@ -201,7 +198,7 @@ Options: Back + A then just opens the normal chat box, and Back + A / Back + B
 send or close it while you type.
 
 ### World map
-
+<img width="1224" height="810" alt="image" src="https://github.com/user-attachments/assets/0a0acb75-8201-4eab-af09-96ef0768e864" />
 The map gets its own cursor: a gold diamond with crosshair lines, plus cursor
 and player coordinates.
 
@@ -223,6 +220,8 @@ turning can cause a small hiccup. Needs Hardware Cursor (Esc > Video, on by
 default).
 
 ### Healer mode
+<img width="602" height="611" alt="image" src="https://github.com/user-attachments/assets/9e0cbfed-3c54-4531-bf85-1073ce836aa8" />
+
 
 Off by default: Options > Buttons > **Healer mode**, then **Apply**.
 
@@ -236,6 +235,7 @@ Works in combat. With healer mode off, the ally bumper targets the nearest
 friendly as before.
 
 ### Utility ring
+<img width="612" height="724" alt="image" src="https://github.com/user-attachments/assets/5a381251-86c4-4ba6-8200-b48e51a1310a" />
 
 Eight spells, items or macros on one button. Options > WowPad > Bars >
 **Utility ring**: pick the button that opens it (a D-pad button, or any slot
@@ -244,6 +244,7 @@ the middle of the screen). In game: hold the button, point the right stick at a
 wedge, let go to use it. Let go in the middle to cancel. Works in combat.
 
 ### Lite bar
+<img width="1895" height="1079" alt="image" src="https://github.com/user-attachments/assets/b9b9dc7b-65a9-4c52-8cfb-81b2465a9d1c" />
 
 Options > WowPad > Bars > **Lite mode** shows one cluster instead of four: your
 default set, and while you hold LT, RT or both, that set in its place (a small
@@ -251,8 +252,8 @@ badge says which). It has its own position and size, and can sit right on the
 bottom edge of the screen. In **Edit bar layout**, tabs above it (Default / LT /
 RT / LT+RT) pick which set you're filling.
 
-### Main menu (Start)
-
+### Radial menu (Start)
+<img width="1913" height="1075" alt="image" src="https://github.com/user-attachments/assets/d7ccb686-51ae-4688-9ced-95b79016fdbc" />
 A radial wheel with three pages (LB / RB). Point the right stick at a wedge
 and press A; B or Start closes it.
 
