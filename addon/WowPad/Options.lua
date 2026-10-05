@@ -154,24 +154,32 @@ local function Build()
     "X interacts (your " .. (WowPadDB.interactKey or "F") .. " binding) and starts attacking a hostile target.",
     R - 4, -74, function() return WowPadDB.xAttack ~= false end,
     function(v) WowPadDB.xAttack = v; WP.RefreshInteract() end)
+  Check("WowPadOptSwapLBRB", "Swap LB / RB targeting",
+    "LB targets enemies and RB targets friends. In menus LB/RB still switch windows as before.",
+    R - 4, -98, function() return WowPadDB.swapBumpers == true end,
+    function(v)
+      WowPadDB.swapBumpers = v
+      if InCombatLockdown() then WP.Print("Swap applies after combat.") end
+      WP.RefreshInteract()
+    end)
 
-  Header("Messages", R - 4, -108)
+  Header("Messages", R - 4, -132)
   Check("WowPadOptStatus", "Show the status line", "Mode, set and context above the bar.",
-    R - 4, -126, function() return WowPadDB.showStatus == true end,
+    R - 4, -150, function() return WowPadDB.showStatus == true end,
     function(v) WowPadDB.showStatus = v; WP.UpdateStatus() end)
   Check("WowPadOptDebug", "Debug messages in chat", nil,
-    R - 4, -150, function() return WowPadDB.debug == true end,
+    R - 4, -174, function() return WowPadDB.debug == true end,
     function(v) WowPadDB.debug = v end)
 
-  Header("|cffff9900Experimental|r", R - 4, -184)
+  Header("|cffff9900Experimental|r", R - 4, -208)
   Check("WowPadOptWalk", "Walk/run by stick tilt*",
     "Slight tilt walks, full tilt runs, using the game's Run/Walk toggle. Stopping always returns to running. If you press the "
     .. "keyboard Run/Walk key yourself, slight and full tilt swap; press that key again to fix it.",
-    R - 4, -202, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
+    R - 4, -226, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
   Check("WowPadOptSmooth", "Smooth camera*",
     "Smooths right-stick camera turning, so it glides instead of stepping. Adds a little delay "
     .. "(about 60 ms, [Camera] SmoothMs in wowpad.ini). Camera only, not the pointer.",
-    R - 4, -226, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
+    R - 4, -250, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
 
   -- Bars page
   target = barsPanel
@@ -192,7 +200,11 @@ local function Build()
     function(v) if (WowPadDB.hideBlizz ~= false) ~= v and WP.ToggleBlizzBars then WP.ToggleBlizzBars() end end)
   Slider("WowPadOptScale", "Bar size", "Size of the controller bar.", L, -140,
     { min = 0.4, max = 1.6, step = 0.05, fmt = X,
-      get = function() return (WowPadDB.bar and WowPadDB.bar.scale) or 1 end,
+      get = function()
+        local p = WowPadDB.bar
+        if WowPadDB.barLite and p and p.lite then return p.lite.scale or 1 end
+        return (p and p.scale) or 1
+      end,
       set = function(v) if WP.Bar then WP.Bar.SetScale(v) end end })
   local edit = CreateFrame("Button", "WowPadOptEdit", barsPanel, "UIPanelButtonTemplate")
   edit:SetSize(150, 22)
@@ -203,6 +215,19 @@ local function Build()
     if WP.ToggleEdit then WP.ToggleEdit() end
   end)
 
+  Header("Lite mode", R - 4, -56)
+  Check("WowPadOptLite", "Show one set at a time",
+    "One cluster instead of four: it shows your default set, and holding LT, RT or both shows that set in "
+    .. "its place. Has its own position and size (move it in Edit bar layout; it can sit on the bottom edge). "
+    .. "In Edit bar layout, tabs above it pick which set you're assigning.",
+    R - 4, -74, function() return WowPadDB.barLite == true end,
+    function(v)
+      if InCombatLockdown() then WP.Print("Leave combat first."); return end
+      if WP.Bar and WP.Bar.SetLite then WP.Bar.SetLite(v) end
+      if WowPadOptScale and WowPadOptScale.get then
+        WowPadOptScale.loading = true; WowPadOptScale:SetValue(WowPadOptScale.get()); WowPadOptScale.loading = false
+      end
+    end)
 
   Header("Extra bars", L - 4, -206)
   Check("WowPadOptXP", "XP bar", "WowPad's own XP bar. Turn off to use another addon's.",

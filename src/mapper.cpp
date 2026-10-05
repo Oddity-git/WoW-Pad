@@ -294,6 +294,24 @@ void UpdateButtons(const ControllerState& s, const Config& c) {
         Signal_Tap(both ? SIG_ZOOM_ON : SIG_ZOOM_OFF);
     }
 
+    // Back + A / Back + B: real Enter / Esc keys. The chat box takes every key
+    // while you type (the addon's bindings never fire there), but it does
+    // understand Enter (send / open chat) and Esc (close). The chord eats the
+    // A/B press and Back's own map/bags action.
+    if (s.buttons & PAD_BACK) {
+        BYTE vk = 0;
+        if (pressed & PAD_A) vk = VK_RETURN;
+        else if (pressed & PAD_B) vk = VK_ESCAPE;
+        if (vk) {
+            g_chordUsed = true;
+            pressed &= (uint16_t)~(PAD_A | PAD_B);
+            Inject_Key(vk, true);
+            TapWait(20);
+            Inject_Key(vk, false);
+            Log_Write("MAP Back+%s -> %s", vk == VK_RETURN ? "A" : "B", vk == VK_RETURN ? "Enter" : "Esc");
+        }
+    }
+
     // Back: tap = map, hold = bags. Start: on release. Both suppressed when
     // used together as the kill-switch chord.
     if (pressed & PAD_BACK) { g_backDownAt = now; g_backHoldSent = false; }

@@ -11,6 +11,7 @@ local LEFT = {
   { "LT + RT",     "Bottom action set" },
   { "D-pad",       "Action slots" },
   { "Back",        "Map (hold: bags)" },
+  { "Back+A / B",  "Chat: send / close" },
 }
 local RIGHT = {
   { "Right stick", "Camera / pointer" },
@@ -41,6 +42,7 @@ local title = F:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetPoint("TOP", 0, -20)
 title:SetText("Controller Map")
 
+local valueText = {}
 local function Column(list, x)
   for i, row in ipairs(list) do
     local k = F:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -49,6 +51,7 @@ local function Column(list, x)
     local v = F:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     v:SetPoint("TOPLEFT", x + 100, -56 - (i - 1) * 26)
     v:SetText(row[2])
+    valueText[row[1]] = v
   end
 end
 Column(LEFT, 30)
@@ -61,4 +64,9 @@ foot:SetText("Reopen from Start > page 2 > Controller.   B to close.")
 local close = CreateFrame("Button", "WowPadInfoCloseButton", F, "UIPanelCloseButton")
 close:SetPoint("TOPRIGHT", -6, -6)
 
-function WP.ShowInfo() F:Show() end
+function WP.ShowInfo()
+  local swap = WowPadDB and WowPadDB.swapBumpers
+  if valueText.LB then valueText.LB:SetText(swap and "Target hostile" or "Target friendly") end
+  if valueText.RB then valueText.RB:SetText(swap and "Target friendly" or "Target hostile") end
+  F:Show()
+end

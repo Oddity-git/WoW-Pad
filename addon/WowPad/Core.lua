@@ -130,12 +130,27 @@ local function SetupSecure()
   end
   header:SetAttribute("_onattributechanged", [=[
     if name ~= "lt" and name ~= "rt" and name ~= "mode" and name ~= "ctx" and name ~= "refresh"
-       and name ~= "editing" and name ~= "alwaysbar" then return end
+       and name ~= "editing" and name ~= "alwaysbar" and name ~= "lite" and name ~= "liteview" then return end
     -- Controller bar: always (default), or controller mode only; always while editing.
     local bar = self:GetFrameRef("bar")
     if bar then
       if self:GetAttribute("alwaysbar") == 1 or self:GetAttribute("mode") == "controller"
          or self:GetAttribute("editing") == 1 then bar:Show() else bar:Hide() end
+    end
+    -- Lite bar: only the set you're holding (else the default set, or the
+    -- edit-mode tab) is shown. All four otherwise.
+    do
+      local lite = self:GetAttribute("lite") == 1
+      local l, r = self:GetAttribute("lt") == 1, self:GetAttribute("rt") == 1
+      local vs = 0
+      if self:GetAttribute("mode") == "controller" then
+        if l and r then vs = 3 elseif l then vs = 1 elseif r then vs = 2 end
+      end
+      if vs == 0 and self:GetAttribute("editing") == 1 then vs = self:GetAttribute("liteview") or 0 end
+      for s = 0, 3 do
+        local c = self:GetFrameRef("c" .. s)
+        if c then if (not lite) or s == vs then c:Show() else c:Hide() end end
+      end
     end
     self:ClearBindings()
     if self:GetAttribute("mode") ~= "controller" then
@@ -266,15 +281,26 @@ function WP.RefreshInteract() -- re-run after combat via PLAYER_REGEN_ENABLED
   local kind, target = "C", "WowPadNoInteract"
   if cmd and cmd ~= "" then kind, target = "B", cmd end
   local xKind, xTarget = SlotAction(0, 7)
+  -- LB/RB targeting, optionally swapped (menus keep LB = previous, RB = next).
+  local swap = WowPadDB.swapBumpers == true
+  local lbT = swap and "TARGETNEARESTENEMY" or "TARGETNEARESTFRIEND"
+  local rbT = swap and "TARGETNEARESTFRIEND" or "TARGETNEARESTENEMY"
+  local lbIdx, rbIdx
+  for i, st in ipairs(STATIC) do
+    if st[1] == "LB" then lbIdx = i elseif st[1] == "RB" then rbIdx = i end
+  end
+  WP.interactCmd = cmd
   local changed = header:GetAttribute("sy" .. idx) ~= kind or header:GetAttribute("st" .. idx) ~= target
                   or header:GetAttribute("y0_7") ~= xKind or header:GetAttribute("t0_7") ~= xTarget
+                  or header:GetAttribute("st" .. lbIdx) ~= lbT or header:GetAttribute("st" .. rbIdx) ~= rbT
   if not changed then return end
   header:SetAttribute("sy" .. idx, kind)
   header:SetAttribute("st" .. idx, target)
   header:SetAttribute("y0_7", xKind)
   header:SetAttribute("t0_7", xTarget)
+  header:SetAttribute("st" .. lbIdx, lbT)
+  header:SetAttribute("st" .. rbIdx, rbT)
   header:SetAttribute("refresh", (header:GetAttribute("refresh") or 0) + 1) -- rebind now
-  WP.interactCmd = cmd
 end
 
 ---------------------------------------------------------------------------
@@ -290,8 +316,23 @@ function WP.AsFrame(x)
   return nil
 end
 
+-- Pop-ups that should take menu navigation when they appear (out of combat):
+-- the dungeon-finder ready dialog and group loot rolls.
+function WP.PopupRoots()
+  local list = {}
+  local d = LFDDungeonReadyDialog
+  if d and d:IsVisible() then list[#list + 1] = d end
+  for i = 1, NUM_GROUP_LOOT_FRAMES or 4 do
+    local f = _G["GroupLootFrame" .. i]
+    if f and f:IsVisible() then list[#list + 1] = f end
+  end
+  return list
+end
+
 local function AnyWindowOpen()
   if WP.Bar and WP.Bar.editing then return true end
+  -- Out of combat only: in combat these must not take the camera away.
+  if not InCombatLockdown() and #WP.PopupRoots() > 0 then return true end
   for _, o in ipairs(WP.overlays) do
     if o:IsShown() then return true end
   end

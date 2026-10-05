@@ -26,6 +26,7 @@ local function CollectRoots()
   for _, o in ipairs(WP.overlays) do add(o) end
   for level = (UIDROPDOWNMENU_MAXLEVELS or 2), 1, -1 do add(_G["DropDownList" .. level]) end
   for i = 1, STATICPOPUP_NUMDIALOGS or 4 do add(_G["StaticPopup" .. i]) end
+  for _, f in ipairs(WP.PopupRoots()) do add(f) end   -- dungeon ready, loot rolls
   add(LootFrame)
   if GetUIPanel then
     for _, side in ipairs({ "center", "left", "right", "doublewide", "fullscreen" }) do add(GetUIPanel(side)) end
@@ -44,6 +45,17 @@ local function CollectRoots()
   return roots
 end
 
+-- Child button of a root by global name, else by its label text (in case a
+-- client names it differently).
+local function FindButton(root, suffix, text)
+  local b = _G[(root:GetName() or "") .. suffix]
+  if b then return b end
+  if not text then return nil end
+  for _, c in ipairs({ root:GetChildren() }) do
+    if c.GetText and c:GetText() == text then return c end
+  end
+end
+
 ---------------------------------------------------------------------------
 -- Nodes
 ---------------------------------------------------------------------------
@@ -55,13 +67,36 @@ local function Usable(f)
   return w and h and w >= 6 and h >= 6
 end
 
-local function Collect(frame, out, depth)
+-- Screen rect of a frame (left, bottom, right, top) in screen pixels.
+local function Rect(f)
+  local l, b, w, h = f:GetRect()
+  if not l then return nil end
+  local s = f:GetEffectiveScale()
+  return l * s, b * s, (l + w) * s, (b + h) * s
+end
+
+local function CenterIn(n, sf)
+  local l, b, w, h = n:GetRect()
+  local L, B, R, T = Rect(sf)
+  if not l or not L then return false end
+  local s = n:GetEffectiveScale()
+  local x, y = (l + w / 2) * s, (b + h / 2) * s
+  return x >= L - 2 and x <= R + 2 and y >= B - 2 and y <= T + 2
+end
+
+-- Nodes, plus the visible scroll frames (lists) found on the way. Nodes
+-- inside a real scroll frame that are scrolled out of view are skipped.
+local function Collect(frame, out, depth, scrolls, clip)
   if depth > 14 then return end
   local kids = { frame:GetChildren() }
   for _, c in ipairs(kids) do
     if c:IsVisible() then
-      if Usable(c) then out[#out + 1] = c end
-      Collect(c, out, depth + 1)
+      if Usable(c) and not (clip and not CenterIn(c, clip)) then out[#out + 1] = c end
+      local isScroll = c.GetObjectType and c:GetObjectType() == "ScrollFrame"
+      if isScroll and scrolls then scrolls[#scrolls + 1] = c end
+      -- A scroll bar sits beside its list: keep its arrow buttons selectable.
+      local isBar = c.GetObjectType and c:GetObjectType() == "Slider"
+      Collect(c, out, depth + 1, scrolls, isScroll and c or (not isBar and clip) or nil)
     end
   end
 end
@@ -124,7 +159,7 @@ end
 -- Highlight + tooltip
 ---------------------------------------------------------------------------
 local hl = CreateFrame("Frame", "WowPadNavHighlight", UIParent)
-hl:SetFrameStrata("TOOLTIP")
+hl:SetFrameStrata("FULLSCREEN_DIALOG")
 hl:Hide()
 local function Edge(p1, p2, w, h)
   local t = hl:CreateTexture(nil, "OVERLAY")
@@ -257,9 +292,9 @@ StaticPopupDialogs.WOWPAD_DESTROY = {
   end,
   timeout = 0, whileDead = 1, hideOnEscape = 1, showAlert = 1,
 }
-function Nav.Destroy()
+function Nav.Destroy(link, bag, slot)
   if InCombatLockdown() then return end
-  local link, bag, slot = Nav.FocusedItem()
+  if not link then link, bag, slot = Nav.FocusedItem() end
   if not (link and bag) then return end
   local _, count = GetContainerItemInfo(bag, slot)
   local what = link .. ((count and count > 1) and (" x" .. count) or "")
@@ -286,10 +321,18 @@ GameTooltip:HookScript("OnTooltipSetItem", function(self)
   if Nav.comparing and GameTooltip_ShowCompareItem then pcall(GameTooltip_ShowCompareItem, self, 1) end
 end)
 
+-- Selection memory while a window stays open: per window, the last selected
+-- node and where it was (so a vanished node, e.g. a sold item, is replaced by
+-- its nearest neighbour instead of jumping back to the top-left).
+Nav.memory = {}
 function Nav.Select(node)
   if node == Nav.cur then return end
   if Nav.cur then CallScript(Nav.cur, "OnLeave") end
   Nav.cur = node
+  if node and Nav.root then
+    local x, y = Center(node)
+    Nav.memory[Nav.root] = { node = node, x = x, y = y }
+  end
   if node then
     hl:ClearAllPoints()
     hl:SetPoint("TOPLEFT", node, "TOPLEFT", -3, 3)
@@ -306,11 +349,11 @@ end
 -- Focus outline + button hints (which window has focus, what LB/RB does)
 ---------------------------------------------------------------------------
 local focus = CreateFrame("Frame", "WowPadNavFocus", UIParent)
-focus:SetFrameStrata("TOOLTIP")
+focus:SetFrameStrata("FULLSCREEN_DIALOG")
 focus:Hide()
 local function FocusEdge(p1, p2, w, h)
   local t = focus:CreateTexture(nil, "OVERLAY")
-  t:SetTexture(0.35, 0.7, 1, 0.8)
+  t:SetTexture(0.35, 0.7, 1, 0.6)
   t:SetPoint(p1); t:SetPoint(p2)
   if w then t:SetWidth(w) end
   if h then t:SetHeight(h) end
@@ -321,7 +364,7 @@ FocusEdge("TOPLEFT", "BOTTOMLEFT", 2, nil)
 FocusEdge("TOPRIGHT", "BOTTOMRIGHT", 2, nil)
 
 local hints = CreateFrame("Frame", "WowPadNavHints", UIParent)
-hints:SetFrameStrata("TOOLTIP")
+hints:SetFrameStrata("FULLSCREEN_DIALOG")
 hints:SetHeight(24)
 hints:SetClampedToScreen(true)
 hints:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -339,13 +382,16 @@ local FRIENDLY = {
   FriendsFrame = "Social", GossipFrame = "Gossip", QuestFrame = "Quest", LootFrame = "Loot",
   BankFrame = "Bank", MailFrame = "Mail", TradeFrame = "Trade", AuctionFrame = "Auction House",
   ClassTrainerFrame = "Trainer", TaxiFrame = "Flight Map", GameMenuFrame = "Game Menu",
-  DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu", WowPadInfo = "Controller Map",
+  DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu", WowPadInfo = "Controller Map", WowPadItemActions = "Item",
 }
 local function WindowName(f)
   local n = f and f:GetName()
   if not n then return "window" end
   if n:find("^ContainerFrame") then return "Bags" end
+  if n:find("^Bagnon") then return n:lower():find("bank") and "Bank" or "Bags" end
   if n:find("^StaticPopup") then return "Popup" end
+  if n:find("^GroupLootFrame") then return "Loot Roll" end
+  if n == "LFDDungeonReadyDialog" then return "Dungeon" end
   if n:find("^DropDownList") then return "Menu" end
   return FRIENDLY[n] or (n:gsub("Frame$", ""))
 end
@@ -370,7 +416,11 @@ function Nav.UpdateHints()
     -- Bags (default, bank, bag addons): X/Y/L3 always listed.
     local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
     parts = { K:format("A", "Select"), K:format("X", vendorOpen and "Sell" or "Use"),
-              K:format("Y", "Preview, hold: Compare"), K:format("L3", "Destroy"), K:format("B", "Close") }
+              K:format("Y", "Preview, hold: Compare"), K:format("L3", "Item actions"), K:format("B", "Close") }
+  elseif root == LFDDungeonReadyDialog then
+    parts = { K:format("A", "Select"), K:format("B", "Leave Queue") }
+  elseif (root:GetName() or ""):find("^GroupLootFrame%d") then
+    parts = { K:format("A", "Roll"), K:format("B", "Pass") }
   else
     -- Everything else: only what applies everywhere.
     parts = { K:format("A", "Select"), K:format("B", "Close") }
@@ -429,6 +479,9 @@ end
 
 function Nav.Refresh()
   Nav.roots = CollectRoots()
+  local open = {}
+  for _, r in ipairs(Nav.roots) do open[r] = true end
+  for r in pairs(Nav.memory) do if not open[r] then Nav.memory[r] = nil end end
   local top = Nav.roots[1]
   local stillOpen = false
   for _, r in ipairs(Nav.roots) do if r == Nav.root then stillOpen = true end end
@@ -442,11 +495,11 @@ function Nav.Refresh()
   end
   lastTop = top
 
-  local nodes = {}
+  local nodes, scrolls = {}, {}
   if Nav.root then
-    for _, f in ipairs(RootFrames(Nav.root)) do Collect(f, nodes, 0) end
+    for _, f in ipairs(RootFrames(Nav.root)) do Collect(f, nodes, 0, scrolls) end
   end
-  Nav.nodes, Nav.nodeSet = nodes, {}
+  Nav.nodes, Nav.nodeSet, Nav.scrolls = nodes, {}, scrolls
   for _, n in ipairs(nodes) do Nav.nodeSet[n] = true end
 
   -- Follow the pointer when it moves onto a node.
@@ -460,9 +513,36 @@ function Nav.Refresh()
   lastMX, lastMY = mx, my
 
   if not Nav.cur or not Nav.nodeSet[Nav.cur] then
+    -- Back to where this window was: the same node, else the nearest one.
+    local mem = Nav.root and Nav.memory[Nav.root]
+    if mem then
+      local pick = Nav.nodeSet[mem.node] and mem.node
+      if not pick and mem.x then
+        local bd
+        for _, n in ipairs(nodes) do
+          local x, y = Center(n)
+          if x then
+            local d = (x - mem.x) ^ 2 + (y - mem.y) ^ 2
+            if not bd or d < bd then pick, bd = n, d end
+          end
+        end
+      end
+      if pick then Nav.Select(pick); Nav.UpdateHints(); return end
+    end
     local pref
-    if Nav.root and Nav.root.which == "WOWPAD_DESTROY" then pref = _G[Nav.root:GetName() .. "Button2"] end
-    Nav.Select((pref and Nav.nodeSet[pref]) and pref or DefaultNode(nodes))
+    local rn = Nav.root and Nav.root:GetName()
+    if Nav.root and Nav.root.which == "WOWPAD_DESTROY" then pref = { _G[rn .. "Button2"] }
+    elseif rn == "WowPadItemActions" then pref = { WowPadItemActionsCancel }
+    elseif rn == "LFDDungeonReadyDialog" then pref = { FindButton(Nav.root, "EnterDungeonButton", ENTER_DUNGEON) }
+    elseif rn and rn:find("^GroupLootFrame%d") then
+      -- Need if allowed, else Greed (disabled buttons aren't nodes).
+      pref = { _G[rn .. "RollButton"], _G[rn .. "GreedButton"], _G[rn .. "DisenchantButton"] }
+    end
+    local pick
+    for _, p in ipairs(pref or {}) do
+      if p and Nav.nodeSet[p] then pick = p; break end
+    end
+    Nav.Select(pick or DefaultNode(nodes))
   end
   Nav.UpdateHints()
 end
@@ -475,16 +555,70 @@ nf:SetScript("OnUpdate", function(_, elapsed)
   if Active() then
     Nav.Refresh()
   elseif Nav.cur or hl:IsShown() or hints:IsShown() then
+    -- Paused (trigger held, combat...): keep memory of windows still open.
+    for r in pairs(Nav.memory) do if not r:IsVisible() then Nav.memory[r] = nil end end
     Nav.Select(nil)
     Nav.root, lastTop = nil, nil
     Nav.UpdateHints()
   end
 end)
 
+-- The scroll bar of a list (Blizzard names it <scrollframe>ScrollBar).
+local function ScrollBarOf(sf)
+  local n = sf:GetName()
+  local bar = (n and _G[n .. "ScrollBar"]) or sf.ScrollBar
+  if not bar then
+    for _, c in ipairs({ sf:GetChildren() }) do
+      if c.GetObjectType and c:GetObjectType() == "Slider" then bar = c; break end
+    end
+  end
+  if bar and bar:IsVisible() and bar.GetValue then return bar end
+end
+
+-- D-pad up/down at the edge of a list: scroll the list one row instead of
+-- leaving it (auction house, professions, quest log...). Returns true if it did.
+local function TryScroll(cur, nxt, dy)
+  if dy == 0 or not Nav.scrolls then return false end
+  for _, sf in ipairs(Nav.scrolls) do
+    if CenterIn(cur, sf) and not (nxt and CenterIn(nxt, sf)) then
+      local bar = ScrollBarOf(sf)
+      if bar then
+        local lo, hi = bar:GetMinMaxValues()
+        local v = bar:GetValue()
+        local step = math.max(cur:GetHeight() or 16, 8)
+        local nv = v - dy * step               -- D-pad down (dy = -1) = scroll down
+        nv = math.max(lo, math.min(hi, nv))
+        if math.abs(nv - v) > 0.5 then
+          local x, y = Center(cur)
+          bar:SetValue(nv)
+          -- Stay on the same screen row: same button for Blizzard's row
+          -- lists, the next item for lists that really move.
+          Nav.Refresh()
+          local best, bd
+          for _, n in ipairs(Nav.nodes) do
+            local nx, ny = Center(n)
+            if nx and CenterIn(n, sf) then
+              local d = (nx - x) ^ 2 + (ny - y) ^ 2
+              if not bd or d < bd then best, bd = n, d end
+            end
+          end
+          if best then
+            if best == Nav.cur then CallScript(best, "OnLeave"); Nav.cur = nil end
+            Nav.Select(best)                    -- re-select: refreshes the tooltip
+          end
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
 function Nav.Move(dx, dy)
   if not Active() then return end
   Nav.Refresh()
   local nxt = Nav.cur and Pick(Nav.cur, Nav.nodes, dx, dy)
+  if Nav.cur and TryScroll(Nav.cur, nxt, dy) then Nav.byDpad = true; return end
   if nxt then Nav.Select(nxt); Nav.byDpad = true end
 end
 
@@ -512,6 +646,10 @@ function Nav.BackTarget()
     if z and z:IsVisible() and z:IsEnabled() and (GetCurrentMapContinent() or 0) > 0 then return z end
   end
   if name then
+    -- Dungeon ready: B = Leave Queue. Loot roll: B = Pass.
+    local special = (name == "LFDDungeonReadyDialog" and FindButton(root, "LeaveButton", LEAVE_QUEUE))
+                 or (name:find("^GroupLootFrame%d") and _G[name .. "PassButton"])
+    if special and special:IsVisible() then return special end
     if name:find("^StaticPopup%d") then
       local b2 = _G[name .. "Button2"]
       if b2 and b2:IsVisible() then return b2 end
@@ -568,8 +706,9 @@ do
   end)
 end
 IB("WowPadNavDestroy", function()
-  if WowPadDB.debug then WP.Print("L3 in menu: destroy") end
-  if Active() then Nav.Destroy() end
+  if WowPadDB.debug then WP.Print("L3 in menu: item actions") end
+  if not Active() then return end
+  if WP.OpenItemActions then WP.OpenItemActions() else Nav.Destroy() end
 end)
 IB("WowPadNavPrev",  function() if WP.Radial and WP.Radial:IsShown() then WP.Radial.Page(-1) else Nav.CycleRoot(-1) end end)
 IB("WowPadNavNext",  function() if WP.Radial and WP.Radial:IsShown() then WP.Radial.Page(1) else Nav.CycleRoot(1) end end)
@@ -611,3 +750,38 @@ table.insert(WP.setupHooks, function()
     self:SetAttribute("clickbutton", Nav.BackTarget())
   end)
 end)
+
+---------------------------------------------------------------------------
+-- Chat box: while you type it takes every key, so the pad's own A/B never
+-- reach the addon. The DLL sends real Enter/Esc for Back+A / Back+B, which
+-- the box understands. Here: just a hint above the box in controller mode.
+---------------------------------------------------------------------------
+do
+  local chatHint
+  local function Hook(box)
+    if not box or box.wowpadHooked then return end
+    box.wowpadHooked = true
+    box:HookScript("OnEditFocusGained", function(self)
+      if WP.mode ~= "controller" then return end
+      if not chatHint then
+        chatHint = CreateFrame("Frame", "WowPadChatHint", UIParent)
+        chatHint:SetSize(260, 20)
+        chatHint:SetFrameStrata("TOOLTIP")
+        local t = chatHint:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        t:SetPoint("LEFT")
+        t:SetText("|cffffd100Back + A|r Send     |cffffd100Back + B|r Close")
+      end
+      chatHint:ClearAllPoints()
+      chatHint:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 6, 2)
+      chatHint:Show()
+    end)
+    box:HookScript("OnEditFocusLost", function() if chatHint then chatHint:Hide() end end)
+  end
+
+  local f = CreateFrame("Frame")
+  f:RegisterEvent("PLAYER_LOGIN")
+  f:SetScript("OnEvent", function()
+    Hook(_G.ChatFrameEditBox)
+    for i = 1, NUM_CHAT_WINDOWS or 10 do Hook(_G["ChatFrame" .. i .. "EditBox"]) end
+  end)
+end

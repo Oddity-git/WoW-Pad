@@ -1,13 +1,14 @@
 ## Interface: 30300
 ## Title: WowPad
 ## Notes: Native-feel controller support. Needs version.dll from the WowPad package next to Wow.exe.
-## Version: 1.2.0
+## Version: 1.3.0
 ## SavedVariables: WowPadDB
 ## SavedVariablesPerCharacter: WowPadCharDB
 Signals.lua
 Core.lua
 Snap.lua
 Nav.lua
+ItemActions.lua
 Radial.lua
 UnitMenu.lua
 Info.lua

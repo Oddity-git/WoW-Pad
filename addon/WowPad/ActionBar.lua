@@ -178,7 +178,14 @@ end
 
 function Bar.HighlightSet(set)
   for s, c in pairs(clusters) do
-    for _, o in ipairs(c.outlines) do Shown(o, s == set) end
+    -- Gold outline on the held set (normal bar only; lite shows one set anyway).
+    for _, o in ipairs(c.outlines) do Shown(o, s == set and not (WowPadDB and WowPadDB.barLite)) end
+  end
+  -- Lite: badge says which set is up (texts are fine to change in combat).
+  if Bar.badge then
+    local lite = WowPadDB and WowPadDB.barLite
+    local name = set and set > 0 and ({ "LT", "RT", "LT+RT" })[set]
+    if lite and name then Bar.badge:SetText(name); Bar.badge:Show() else Bar.badge:Hide() end
   end
 end
 
@@ -288,23 +295,49 @@ end
 ---------------------------------------------------------------------------
 -- Position / scale (account-wide)
 ---------------------------------------------------------------------------
-local function SavePosition()
-  local x, y = bar:GetCenter()
-  WowPadDB.bar = WowPadDB.bar or {}
-  WowPadDB.bar.x, WowPadDB.bar.y = x, y
-end
-
-local function ApplyPosition()
+-- Normal and lite layouts keep separate positions/sizes (WowPadDB.bar and
+-- WowPadDB.bar.lite), so switching never disturbs the other one.
+function Bar.Pos()
   if not WowPadDB.bar or WowPadDB.bar.layout ~= LAYOUT_VERSION then
     WowPadDB.bar = { layout = LAYOUT_VERSION }
   end
-  local p = WowPadDB.bar
+  if WowPadDB.barLite then
+    WowPadDB.bar.lite = WowPadDB.bar.lite or {}
+    return WowPadDB.bar.lite
+  end
+  return WowPadDB.bar
+end
+
+local function SavePosition()
+  local x, y = bar:GetCenter()
+  local p = Bar.Pos()
+  p.x, p.y = x, y
+end
+
+local PAD = 10   -- transparent margin around the clusters (edit-mode background)
+local function ApplyPosition()
+  local p = Bar.Pos()
+  local lite = WowPadDB.barLite
+  -- Lite: one cluster, and it may sit flush on the screen edge (the clamp
+  -- ignores the transparent margin).
+  if lite then
+    bar:SetSize(2 * (HALF + STEP) + SIZE + 2 * PAD, 2 * STEP + SIZE + 2 * PAD)
+    bar:SetClampRectInsets(PAD, -PAD, -PAD, PAD)
+  else
+    bar:SetSize(2 * SIDE + 2 * (HALF + STEP) + SIZE + 2 * PAD, 2 * VERT + 2 * STEP + SIZE + 2 * PAD)
+    bar:SetClampRectInsets(0, 0, 0, 0)
+  end
+  for set, c in pairs(clusters) do
+    c:ClearAllPoints()
+    if lite then c:SetPoint("CENTER", bar, "CENTER", 0, 0)
+    else c:SetPoint("CENTER", bar, "CENTER", CLUSTERS[set][1], CLUSTERS[set][2]) end
+  end
   bar:SetScale(p.scale or 1)
   bar:ClearAllPoints()
   if p.x then
     bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", p.x, p.y)
   else
-    bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 120)
+    bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, lite and 20 or 120)
   end
 end
 
@@ -313,10 +346,34 @@ function Bar.SetScale(scale)
   scale = math.max(0.4, math.min(1.6, scale))
   local x, y = bar:GetCenter()
   local old = bar:GetScale()
-  WowPadDB.bar = WowPadDB.bar or {}
-  WowPadDB.bar.scale = scale
-  if x then WowPadDB.bar.x, WowPadDB.bar.y = x * old / scale, y * old / scale end
+  local p = Bar.Pos()
+  p.scale = scale
+  if x then p.x, p.y = x * old / scale, y * old / scale end
   ApplyPosition()
+end
+
+---------------------------------------------------------------------------
+-- Lite mode: one cluster; holding a trigger shows that set in its place.
+---------------------------------------------------------------------------
+local badge, tabs = nil, {}
+local LITE_NAMES = { [0] = "Default", [1] = "LT", [2] = "RT", [3] = "LT+RT" }
+
+local function UpdateTabs()
+  local view = WP.header and WP.header:GetAttribute("liteview") or 0
+  for s, t in pairs(tabs) do
+    Shown(t, Bar.editing and WowPadDB.barLite)
+    if s == view then t:LockHighlight() else t:UnlockHighlight() end
+  end
+end
+
+function Bar.SetLite(on)
+  if InCombatLockdown() or not bar then WP.Print("Not in combat.") return end
+  WowPadDB.barLite = on and true or false
+  ApplyPosition()
+  WP.header:SetAttribute("liteview", 0)
+  WP.header:SetAttribute("lite", on and 1 or 0)
+  Bar.HighlightSet(WP.set)
+  UpdateTabs()
 end
 
 ---------------------------------------------------------------------------
@@ -334,8 +391,12 @@ function Bar.SetEditing(on)
   bar:EnableMouseWheel(on) -- only while editing, so camera zoom works over the bar
   Shown(bar.editBg, on)
   Shown(editHelp, on)
+  editHelp:ClearAllPoints()
+  editHelp:SetPoint("BOTTOM", bar, "TOP", 0, WowPadDB.barLite and 30 or 6)
+  if not on and WP.header then WP.header:SetAttribute("liteview", 0) end
   WP.header:SetAttribute("editing", on and 1 or 0) -- keeps the bar visible in desktop mode
   if WP.Extra then WP.Extra.SetEditing(on) end     -- XP and pet bar movers
+  UpdateTabs()
   if on then
     WP.Print("Edit mode: drag spells, items or macros onto slots; drag the bar to move it; "
              .. "mouse wheel over it to resize; right-click a slot to clear. /wp edit to finish.")
@@ -357,7 +418,8 @@ end
 -- Construction (out of combat, via setup hook)
 ---------------------------------------------------------------------------
 local function MakeCluster(set)
-  local c = CreateFrame("Frame", "WowPadBarCluster" .. set, bar)
+  -- Secure (protected) so the header may show/hide it in combat (lite mode).
+  local c = CreateFrame("Frame", "WowPadBarCluster" .. set, bar, "SecureHandlerBaseTemplate")
   c:SetSize(2 * (HALF + STEP) + SIZE, 2 * STEP + SIZE)
   c:SetPoint("CENTER", bar, "CENTER", CLUSTERS[set][1], CLUSTERS[set][2])
   c.outlines = {}
@@ -512,7 +574,6 @@ end
 
 table.insert(WP.setupHooks, function()
   bar = CreateFrame("Frame", "WowPadBar", UIParent, "SecureHandlerBaseTemplate")
-  bar:SetSize(2 * SIDE + 2 * (HALF + STEP) + SIZE + 20, 2 * VERT + 2 * STEP + SIZE + 20)
   bar:SetFrameStrata("MEDIUM")
   bar:SetMovable(true)
   bar:SetClampedToScreen(true)
@@ -534,6 +595,28 @@ table.insert(WP.setupHooks, function()
   bar:Hide()
   Bar.frame = bar
 
+  -- Lite mode: set badge, and edit-mode tabs to pick which set you're editing.
+  local b = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  b:SetPoint("BOTTOM", bar, "TOP", 0, -4)
+  b:Hide()
+  Bar.badge = b
+  for s = 0, 3 do
+    local t = CreateFrame("Button", "WowPadBarLiteTab" .. s, bar, "UIPanelButtonTemplate")
+    t:SetSize(s == 0 and 62 or 50, 20)
+    t:SetText(LITE_NAMES[s])
+    t:SetScript("OnClick", function()
+      if InCombatLockdown() then return end
+      WP.header:SetAttribute("liteview", s)
+      UpdateTabs()
+    end)
+    t:Hide()
+    tabs[s] = t
+  end
+  tabs[0]:SetPoint("BOTTOMRIGHT", bar, "TOP", -52, 4)
+  tabs[1]:SetPoint("LEFT", tabs[0], "RIGHT", 2, 0)
+  tabs[2]:SetPoint("LEFT", tabs[1], "RIGHT", 2, 0)
+  tabs[3]:SetPoint("LEFT", tabs[2], "RIGHT", 2, 0)
+
   for set = 0, 3 do
     local c = MakeCluster(set)
     for i = 1, 8 do
@@ -542,8 +625,11 @@ table.insert(WP.setupHooks, function()
   end
   ApplyPosition()
 
-  -- The header shows/hides the bar (always, or controller/edit mode only); works in combat.
+  -- The header shows/hides the bar (always, or controller/edit mode only)
+  -- and, in lite mode, which cluster; works in combat.
   SecureHandlerSetFrameRef(WP.header, "bar", bar)
+  for set = 0, 3 do SecureHandlerSetFrameRef(WP.header, "c" .. set, clusters[set]) end
+  WP.header:SetAttribute("lite", WowPadDB.barLite and 1 or 0)
   WP.header:SetAttribute("alwaysbar", WowPadDB.barAlways == false and 0 or 1)
   WP.header:SetAttribute("refresh", (WP.header:GetAttribute("refresh") or 0) + 1)
 

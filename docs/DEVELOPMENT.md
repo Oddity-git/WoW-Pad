@@ -180,3 +180,22 @@ Options > Sticks > "Walk on slight tilt, run on full tilt", then Apply. A slight
 
 ## Menus: preview and destroy
 With a window open (no trigger held): **Y tap** previews the selected item in the dressing room (gear only), **Y hold** compares it with what you wear. In bags, **L3** destroys the selected item after a confirmation popup with *Cancel* selected (A on Destroy to confirm, B cancels). The hint bar under the window shows what Y and L3 do for the selected item.
+
+## 1.3.0 notes
+- **Chat (Back + A / Back + B):** while a chat edit box has focus, WoW gives it every key: the addon's
+  bindings never fire and the box doesn't report the pad's keys to addons (no OnKeyDown/OnChar for them).
+  So the DLL sends real `VK_RETURN` / `VK_ESCAPE` for Back+A / Back+B (mapper.cpp); the chord eats the A/B
+  slot press and Back's own map/bags action. The addon only shows a hint above the chat box.
+- **Menu roots added:** `LFDDungeonReadyDialog` and `GroupLootFrame1-4` (WP.PopupRoots in Core.lua). They
+  count as open windows only out of combat, so in combat they never take the camera or rebind the pad.
+- **Selection memory:** Nav.memory[root] = last node + screen position, kept while the window is open;
+  if the node disappears the nearest node is picked.
+- **List scrolling:** Collect() also gathers visible ScrollFrames; nodes scrolled out of a real ScrollFrame
+  are skipped (scroll-bar buttons exempt). D-pad up/down at a list edge moves the list's scroll bar by one
+  row height (TryScroll in Nav.lua).
+- **Item actions (ItemActions.lua):** L3 in bags opens Disenchant (secure macro button, only if
+  IsSpellKnown(13262) and the item is green-epic armor/weapon) / Destroy (existing confirm) / Cancel.
+- **Lite bar:** the four clusters are SecureHandlerBaseTemplate frames; in lite mode they all sit at the bar
+  centre and the header's attribute snippet shows only the active one (works in combat). Position/scale are
+  saved separately in WowPadDB.bar.lite; edit-mode tabs set the header attribute `liteview`.
+- **New addon file** (ItemActions.lua): WoW reads the TOC file list at game start; a /reload is not enough.
