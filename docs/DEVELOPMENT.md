@@ -1,8 +1,8 @@
 # wowpad
 
 Native-feel controller support for the WoW 3.3.5a (12340) client under Wine.
-Client-side only. Current state: **Phase 5 + polish** (round controller action
-bar, menus, quiet chat). Phase 6 (2026 Steam Controller) pending hardware. DLL `version.dll` + addon `WowPad`.
+Client-side only. DLL `version.dll` + addon `WowPad`. Player-facing documentation is in
+the README; this file covers how it works inside.
 
 ## Controls (controller mode)
 
@@ -26,7 +26,7 @@ Mode switches automatically: any pad input -> controller; a real key press,
 mouse click or mouse movement -> desktop. In desktop mode the DLL sends nothing
 and the addon removes all its numpad bindings, so your keyboard is untouched.
 
-How signals work (from the Phase 3a probe): the DLL presses numpad keys the
+How signals work (found by testing in the client): the DLL presses numpad keys the
 addon has bound. Anything that can cast uses an unmodified numpad key; a secure
 header re-points the 8 slot keys when triggers are held (works in combat).
 `scripts/check_signals.py` keeps `src/signals.cpp` and
@@ -36,10 +36,14 @@ header re-points the 8 slot keys when triggers are held (works in combat).
 
 ```
 src/controller.h          GetControllerState() interface (backend-neutral)
-src/controller_xinput.cpp XInput backend (swap this file for SDL3 in Phase 6)
+src/controller_xinput.cpp XInput backend (an SDL3 backend could replace this file)
 src/controller_filter.cpp Radial stick deadzone + trigger threshold
 src/worker.cpp            Background thread: poll loop + change logging
-src/mapper.cpp            Controller mode: mode detection, sets, nav, pointer mode
+src/mapper.cpp            Controller mode: mode detection, sets, pointer mode, healer flicks,
+                          utility ring, Back+A/B, ground-target place/cancel
+src/cursorhide.cpp        SetCursor hook: hides the cursor while peeking, recognises the
+                          game's cast cursor (ground targeting)
+src/addonsettings.cpp     Reads the addon's wp* settings from SavedVariables
 src/signals.cpp           Signal -> key table (must match addon/WowPad/Signals.lua)
 src/hooks.cpp             Low-level hooks: detects real keyboard/mouse input
 src/inject.cpp            SendInput / PostMessage injection, tagged, release-all
@@ -57,7 +61,7 @@ addon/WowPad/             The addon (copy to Interface/AddOns)
 ## Build
 
 ```sh
-./build.sh            # -> build/version.dll (x86 PE, imports only KERNEL32, USER32, msvcrt)
+./build.sh            # -> build/version.dll (x86 PE, imports only KERNEL32, USER32, GDI32, msvcrt)
 make clean
 ```
 
@@ -215,3 +219,32 @@ With a window open (no trigger held): **Y tap** previews the selected item in th
     "cloaks" Blizzard's TradeSkillFrame instead of hiding it, and it stays a UI panel).
   - B uses `root.CloseButton` when the close button has no name (New Era, modern templates).
   - `ATTACHED` (Nav.lua): separate side frames navigated with a window (New Era's NE_ProfessionsTabs).
+
+## 1.4.0 notes
+- **On-screen keyboard (Keyboard.lua):** Back + A makes the DLL press Enter; the chat box takes focus and, in
+  controller mode, the addon closes it and opens its own keyboard instead (lazy-built, never created when the
+  option is off). Sends through `ChatEdit_SendText`, so slash commands work. In UISpecialFrames, so Back + B
+  (Esc) closes it. New file: needs a full game restart after updating.
+- **Healer mode (wpBumperFlick, off by default):** the DLL engages it only after a bumper is held alone for
+  150 ms (taps never stop the camera), then sends LB/RB_FLICK_DOWN/UP for right-stick flicks and zeroes the
+  camera's vertical axis. The addon binds the ally bumper's flicks to secure WowPadPartyNext/Prev buttons
+  (stepping player, party1-4) and its tap to WowPadPartyCurrent. PartyHighlight.lua finds unit frames by
+  their `unit` attribute and draws a gold frame (driver frame for OnUpdate: a hidden frame never updates).
+- **Utility ring (wpRingSlot = set*10 + button):** while that slot's button is held, the DLL turns the right
+  stick into RING_DIR_0..8 signals (CTRL-SHIFT-F1..F9; centre only after 200 ms) instead of camera motion.
+  The addon's WowPadRingKey is clicked on key down and up; a wrapped snippet shows the ring on down and on up
+  copies the chosen wedge's type/spell/item/macro onto itself and fires. Wedges are bar slots of set 9.
+  Shares its art with the main radial (`WP.BuildWheelArt`).
+- **Ground-targeted spells:** the addon can't click the world in combat, so the DLL does it. cursorhide.cpp
+  checks every cursor the game sets for the game's own cast cursor by its look (50-80 % of pixels visible,
+  average colour blue); aiming stays on until a cursor of another shape appears (the greyed "unable to cast"
+  hand has the same shape). While aiming, A or the same slot button = injected left click at the crosshair,
+  B = Esc; that press is eaten. If camera look is on, the DLL pauses it first (CAM_IDLE), because a left
+  click during camera look counts as both mouse buttons (a step forward). Menus: while aiming with a window
+  open, the addon keeps setting its fully transparent blank cursor, which the DLL reads as "leave A alone".
+  An addon-set marker cursor was tried first: WoW delivered it fully transparent.
+- **Menus:** GameMenuFrame and the option windows are in `WP.EXTRA_WINDOWS`; B presses Return to Game /
+  Cancel (generic fallback: a visible child named `*Cancel` / `*CancelButton`). Quest log: X toggles the
+  watch on the selected quest (`Nav.TrackQuest`). Loot-roll hint includes Y (preview / compare).
+- **Leave Vehicle button** stays visible when Blizzard's bars are hidden (moved to UIParent).
+

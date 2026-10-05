@@ -1,9 +1,10 @@
 // controller.h - backend-neutral controller interface.
 //
 // Everything above this header (mouse emulation, key injection, mode logic)
-// must only use these types and functions. Swapping XInput for SDL3 or a
-// native Linux helper (Phase 6) means writing a new controller_<backend>.cpp
-// that implements the four functions below - nothing else should change.
+// must only use these types and functions. Swapping XInput for another
+// backend (SDL3, a native Linux helper) means writing a new
+// controller_<backend>.cpp that implements the four functions below - nothing
+// else should change.
 #pragma once
 #include <stdint.h>
 

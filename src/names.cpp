@@ -1,3 +1,4 @@
+// names.cpp - pad button and key name tables for wowpad.ini and the log.
 #include "names.h"
 #include "controller.h"
 #include <wchar.h>

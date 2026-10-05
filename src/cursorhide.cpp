@@ -1,7 +1,9 @@
+// cursorhide.cpp - SetCursor hook, window subclass and cast-cursor detection.
 #include "cursorhide.h"
 #include "log.h"
 #include <tlhelp32.h>
 #include <string.h>
+#include <stdint.h>
 
 namespace {
 const UINT     WM_WOWPAD_CURSOR = WM_APP + 0x5750;
@@ -19,8 +21,104 @@ typedef HCURSOR(WINAPI* SetCursor_t)(HCURSOR);
 SetCursor_t g_realSetCursor = nullptr;
 volatile HCURSOR g_wanted = nullptr;   // what the game last asked for
 
+// Ground targeting: while a spell waits for its location, the game shows its
+// "cast" cursor (a blue glowing hand). Every cursor the game sets is checked
+// for it by its look: about two thirds of the pixels visible, average colour
+// blue (measured under Proton: 667 of 1024 pixels, average 5a7f93). The normal
+// pointer is grey and the others are brown/grey, so nothing else matches.
+//
+// Aiming stays on from the first cast cursor until a cursor of another shape
+// appears: over an invalid spot the game shows the same hand greyed out
+// ("unable to cast"), which has the same shape. A fully transparent cursor is
+// WowPad's own blank one: the addon sets it while you aim with a window open,
+// meaning "menu: leave the buttons alone" (it never sets it while aiming in the world).
+volatile LONG  g_aiming    = 0;
+volatile DWORD g_aimAt     = 0;   // last cast cursor seen (safety: aiming expires after 30 s)
+volatile LONG  g_aimShape  = 0;   // visible pixels of the cast cursor
+volatile DWORD g_blankAt   = 0;   // last time the addon's blank cursor was set
+volatile LONG  g_curImage  = -1;  // catalogue number of the last cursor (for the log)
+
+// Debug aid: catalogue of distinct cursor images, each logged once as
+// "Cursor image #n" (helps tune the detection if another client's cursors
+// look different).
+uint32_t g_imgHash[64];
+int      g_imgCount = 0;
+
+bool HasMark(HCURSOR c, long* visible) {
+    ICONINFO ii;
+    *visible = -1;
+    if (!GetIconInfo(c, &ii)) return false;
+    bool mark = false;
+    if (ii.hbmColor) {
+        BITMAP bm;
+        if (GetObjectW(ii.hbmColor, sizeof(bm), &bm) && bm.bmWidth >= 8 && bm.bmWidth <= 256 &&
+            bm.bmHeight >= 8 && bm.bmHeight <= 256) {
+            int w = bm.bmWidth, h = bm.bmHeight;
+            BITMAPINFO bi = {};
+            bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+            bi.bmiHeader.biWidth = w;
+            bi.bmiHeader.biHeight = -h;          // top-down
+            bi.bmiHeader.biPlanes = 1;
+            bi.bmiHeader.biBitCount = 32;
+            bi.bmiHeader.biCompression = BI_RGB;
+            static BYTE buf[256 * 256 * 4];
+            HDC dc = GetDC(nullptr);
+            if (GetDIBits(dc, ii.hbmColor, 0, h, buf, &bi, DIB_RGB_COLORS) == h) {
+                unsigned long sr = 0, sg = 0, sb = 0, n = 0;
+                uint32_t hv = 2166136261u;
+                for (int k = 0; k < w * h; ++k) {
+                    const BYTE* p = buf + k * 4;
+                    for (int j = 0; j < 4; ++j) { hv ^= p[j]; hv *= 16777619u; }
+                    if (p[3] > 128) { sb += p[0]; sg += p[1]; sr += p[2]; ++n; }
+                }
+                unsigned long total = (unsigned long)(w * h);
+                *visible = (long)(n * 1024 / total);   // per 32x32
+                unsigned long r = n ? sr / n : 0, g = n ? sg / n : 0, b = n ? sb / n : 0;
+                // Cast cursor: 50-80 % visible, blue clearly above red, above green.
+                mark = n * 10 >= total * 5 && n * 10 <= total * 8 && b >= r + 40 && b >= g + 10 && b >= 0x60;
+                int idx = -1;
+                for (int i = 0; i < g_imgCount; ++i) if (g_imgHash[i] == hv) { idx = i; break; }
+                if (idx < 0 && g_imgCount < 64) idx = g_imgCount;
+                g_curImage = idx;
+                if (idx == g_imgCount && g_imgCount < 64) {
+                    g_imgHash[g_imgCount++] = hv;
+                    Log_Write("Cursor image #%d: %dx%d, %lu visible, average %02lx%02lx%02lx%s",
+                              g_imgCount - 1, w, h, n, r, g, b, mark ? " = cast cursor (aiming)" : "");
+                }
+            }
+            ReleaseDC(nullptr, dc);
+        }
+        DeleteObject(ii.hbmColor);
+    }
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    return mark;
+}
+
+void Classify(HCURSOR c) {
+    if (!c) return;                        // hidden: tells us nothing
+    long n;
+    bool cast = HasMark(c, &n);
+    if (n < 0) return;                     // couldn't read it
+    if (n == 0) { DWORD t = GetTickCount(); g_blankAt = t ? t : 1; return; }   // WowPad's blank
+    if (cast) {
+        if (!g_aiming) Log_Write("Aiming: cast cursor up");
+        g_aiming = 1;
+        g_aimShape = n;
+        { DWORD t = GetTickCount(); g_aimAt = t ? t : 1; }
+        return;
+    }
+    if (g_aiming) {
+        long d = n - g_aimShape;
+        if (d < 0) d = -d;
+        if (d * 10 <= g_aimShape) return;  // same hand, greyed out: still aiming
+        g_aiming = 0;
+        Log_Write("Aiming: over (cursor image #%ld)", (long)g_curImage);
+    }
+}
+
 HCURSOR WINAPI HookedSetCursor(HCURSOR c) {
     g_wanted = c;
+    Classify(c);
     return g_realSetCursor(g_hide ? nullptr : c);
 }
 
@@ -102,7 +200,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return CallWindowProcW(g_origProc, h, msg, wp, lp);
 }
-}
+} // namespace
 
 void CursorHide_Install(HWND hwnd) {
     if (!hwnd || hwnd == g_hwnd) return;
@@ -115,6 +213,19 @@ void CursorHide_Install(HWND hwnd) {
 }
 
 bool CursorHide_IsOn() { return g_hide != 0; }
+
+// A spell is waiting for its location: the game's cursor is the cast cursor.
+// (The game sets a new cursor as soon as targeting ends, placed or not.)
+bool CursorHide_GroundTargeting() {
+    if (g_aiming && GetTickCount() - g_aimAt > 30000) g_aiming = 0;
+    return g_aiming != 0;
+}
+
+// The addon set its blank cursor in the last 300 ms (a window is open).
+bool CursorHide_MenuVeto() {
+    DWORD at = g_blankAt;
+    return at && GetTickCount() - at < 300;
+}
 
 void CursorHide_Set(bool hide) {
     if (InterlockedExchange(&g_hide, hide ? 1 : 0) == (hide ? 1 : 0)) return;

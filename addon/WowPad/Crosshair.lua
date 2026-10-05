@@ -1,9 +1,11 @@
--- Crosshair.lua - centre dot while the camera is active (controller mode,
--- mouselook on), plus mouseover tooltips like a mouse cursor would give.
+-- Crosshair.lua - crosshair dot while the right stick drives the camera
+-- (controller mode, camera look on or paused for peek), plus mouseover
+-- tooltips like a mouse cursor would give. Also draws the pointer in pointer
+-- mode (R3) and holds the /wp mlprobe diagnostic.
 --
--- WoW (3.3.5) doesn't track units under the pointer during camera look
--- (verified with /wp mlprobe), so tooltips appear when the right stick rests
--- and camera look briefly pauses ("peek", see Core.lua).
+-- WoW (3.3.5) doesn't track units under the pointer during camera look, so
+-- tooltips appear when the right stick rests and camera look briefly pauses
+-- ("peek", see Core.lua).
 -- Dot colour: red = attackable, green = friendly, yellow = neutral, white = nothing.
 -- /wp crosshair toggles it, /wp peek toggles the idle peek.
 
@@ -49,7 +51,7 @@ driver:SetScript("OnUpdate", function(_, elapsed)
   FollowPointer()
   if not C:IsShown() then C:Show() end
   -- WoW swaps in its hand/sword cursor when the mouseover changes; keep ours invisible.
-  if WP.peeking and UnitExists("mouseover") then SetCursor(WP.BLANK_CURSOR) end
+  if WP.peeking and not (SpellIsTargeting and SpellIsTargeting()) and UnitExists("mouseover") then SetCursor(WP.BLANK_CURSOR) end
 
   if UnitExists("mouseover") then
     if UnitCanAttack("player", "mouseover") then dot:SetVertexColor(1, 0.25, 0.2)
@@ -80,7 +82,6 @@ local ART = {
   point    = "Interface\\Cursor\\Point",
   attack   = "Interface\\Cursor\\Attack",
   speak    = "Interface\\Cursor\\Speak",
-  interact = "Interface\\Cursor\\Interact",
 }
 local function PhysHeight()
   local h = tonumber((GetCVar("gxResolution") or ""):match("%d+x(%d+)"))
@@ -128,7 +129,8 @@ function WP.MouselookProbe()
   end)
 end
 
--- The crosshair's cursor hiding needs WoW's hardware cursor (Video options).
+-- Once per UI load: tip to turn on Hardware Cursor (Video options) when it's off
+-- and peek is on, so the crosshair can hide WoW's hand/sword cursor.
 local hint = CreateFrame("Frame")
 hint:RegisterEvent("PLAYER_ENTERING_WORLD")
 hint:SetScript("OnEvent", function(self)

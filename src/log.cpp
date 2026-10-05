@@ -1,3 +1,4 @@
+// log.cpp - wowpad.log writer and the game directory lookup.
 #include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -7,7 +8,6 @@ static INIT_ONCE        g_once = INIT_ONCE_STATIC_INIT;
 static CRITICAL_SECTION g_lock;
 static HANDLE           g_file = INVALID_HANDLE_VALUE;
 static wchar_t          g_dirW[MAX_PATH];
-static char             g_dirU8[MAX_PATH * 3];
 
 static BOOL CALLBACK InitLog(PINIT_ONCE, PVOID, PVOID*) {
     InitializeCriticalSection(&g_lock);
@@ -20,7 +20,6 @@ static BOOL CALLBACK InitLog(PINIT_ONCE, PVOID, PVOID*) {
         if (!slash) slash = wcsrchr(g_dirW, L'/');
         if (slash) slash[1] = 0; else g_dirW[0] = 0;
     }
-    WideCharToMultiByte(CP_UTF8, 0, g_dirW, -1, g_dirU8, sizeof(g_dirU8), nullptr, nullptr);
 
     wchar_t path[MAX_PATH + 16];
     _snwprintf(path, MAX_PATH + 16, L"%lswowpad.log", g_dirW);
@@ -33,8 +32,7 @@ static BOOL CALLBACK InitLog(PINIT_ONCE, PVOID, PVOID*) {
 
 static void EnsureInit() { InitOnceExecuteOnce(&g_once, InitLog, nullptr, nullptr); }
 
-const wchar_t* GameDirW()    { EnsureInit(); return g_dirW; }
-const char*    GameDirUtf8() { EnsureInit(); return g_dirU8; }
+const wchar_t* GameDirW() { EnsureInit(); return g_dirW; }
 
 void Log_Write(const char* fmt, ...) {
     EnsureInit();

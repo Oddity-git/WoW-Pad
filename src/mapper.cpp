@@ -1,8 +1,8 @@
-// mapper.cpp - Phase 3 controller mode.
+// mapper.cpp - controller mode: turns pad state into keys, mouse and signals.
 //
 // Modes: DESKTOP (nothing injected) / CONTROLLER. Pad input -> controller;
-// real keyboard press, mouse click/wheel, or real mouse travel while the
-// pointer is visible -> desktop (hooks.cpp tells real from ours).
+// real keyboard press, mouse click/wheel, or real mouse travel while the pad
+// is idle -> desktop (hooks.cpp tells real from ours).
 //
 // Controller mode:
 //   Left stick   -> movement keys
@@ -13,19 +13,23 @@
 //   LT / RT      -> set switching (LT_ON/OFF, RT_ON/OFF edges)
 //   LB / RB      -> target friendly / hostile (on press)
 //   LB + RB held -> right stick up/down zooms the camera (mouse wheel), hint shown
+//   LB or RB held alone (healer mode) -> right stick up/down flicks pick targets
+//   Utility ring button held -> right stick picks a ring wedge
 //   Right stick  -> CAM_ACTIVE before the first motion, CAM_IDLE after it rests
 //                   (the addon pauses camera look while idle so the crosshair
 //                   can show what's under it: WoW ignores mouseover in mouselook)
 //   Start        -> radial menu (sent on release, so Back+Start can't leak)
 //   Back         -> tap: map, hold: bags
+//   Back + A / B -> real Enter / Esc (for the chat box)
 //   X (no trigger) -> INTERACT (your F binding) then the X slot (startattack)
 //   L3           -> autorun
 //   R3           -> pointer mode toggle (RT/LT click, right stick = pointer)
 //   Back + Start held 1 s -> kill switch
+//   While a spell waits for its location: A or the same button places it, B cancels
 //
-// Menu-vs-action context is decided by the addon, not here: under Proton
-// GetCursorInfo never reports the pointer hidden during mouselook (verified
-// in Phase 3 testing), so the DLL can't tell.
+// Menu-vs-action context is decided by the addon, not here: the DLL can't see
+// which windows are open. It only works out whether camera look is on (no
+// cursor image and the pointer at the window centre, see PointerAtCentre).
 #include <windows.h>
 #include <math.h>
 #include "addonsettings.h"
@@ -41,53 +45,68 @@
 namespace {
 enum Mode { MODE_DESKTOP, MODE_CONTROLLER };
 
-Mode     g_mode        = MODE_DESKTOP;
-bool     g_enabled     = true;
-bool     g_focused     = false;
-bool     g_pointerMode = false;
-uint16_t g_prev        = 0;
+Mode     g_mode          = MODE_DESKTOP;
+bool     g_enabled       = true;
+bool     g_focused       = false;
+bool     g_pointerMode   = false;
+uint16_t g_prev          = 0;
 bool     g_lt = false, g_rt = false;
-bool     g_moveHeld[4]  = {};
-bool     g_walking      = false;   // we toggled the game to walk (walk/run option)
+bool     g_moveHeld[4]   = {};
+bool     g_walking       = false;   // we toggled the game to walk (walk/run option)
 DWORD    g_walkWantSince = 0;
-bool     g_clickHeld[2] = {};
+bool     g_clickHeld[2]  = {};
 double   g_accX = 0, g_accY = 0;
-float    g_smX = 0, g_smY = 0;     // smoothed right stick (smooth camera option)
-int      g_heldSig[8];               // signal held per face/dpad button, -1 none
-bool     g_interactHeld = false;
-bool     g_zoom         = false;     // LB+RB held
-double   g_zoomAcc      = 0;
-bool     g_camActive    = false;     // CAM_ACTIVE sent, CAM_IDLE not yet
-DWORD    g_stickIdleAt  = 0;
-POINT    g_activeStartPt = {};       // pointer when the stick started moving
-bool     g_prevNoCursor = false;     // camera look was on at the last tick
-bool     g_movedMotion  = false;     // we sent motion during this active period
-DWORD    g_lastModeSend = 0;
-DWORD    g_backDownAt   = 0;
-bool     g_backHoldSent = false;
-bool     g_chordUsed    = false;     // Back+Start used together: suppress both
-DWORD    g_chordStart   = 0;
-bool     g_chordFired   = false;
-bool     g_initDone     = false;
+float    g_smX = 0, g_smY = 0;      // smoothed right stick (smooth camera option)
+int      g_heldSig[8];              // signal held per face/dpad button, -1 none
+bool     g_interactHeld  = false;
+bool     g_zoom          = false;   // LB+RB held
+int      g_cycle         = 0;       // one bumper held alone: 1 = LB, 2 = RB (right stick flicks cycle targets)
+int      g_flickDir      = 0;       // current flick (-1 up, +1 down, 0 none, kFlickBlocked)
+int      g_ringHeld      = -1;      // face index (0-7) of the held utility-ring button, -1 = none
+int      g_ringDir       = 0;       // wedge last reported (0 = centre)
+DWORD    g_ringCentreAt  = 0;       // stick back in the middle since
+int      g_cycleWant     = 0;       // bumper held alone right now (before the hold delay)
+DWORD    g_cycleSince    = 0;
+const DWORD kCycleHoldMs  = 150;    // hold this long before the stick flicks instead of turning
+const int   kFlickBlocked = 9;      // stick must return to the middle first
+DWORD    g_flickNext     = 0;       // when a held flick repeats
+double   g_zoomAcc       = 0;
+bool     g_camActive     = false;   // CAM_ACTIVE sent, CAM_IDLE not yet
+DWORD    g_stickIdleAt   = 0;
+POINT    g_activeStartPt = {};      // pointer when the stick started moving
+bool     g_prevNoCursor  = false;   // camera look was on at the last tick
+bool     g_movedMotion   = false;   // we sent motion during this active period
+DWORD    g_lastModeSend  = 0;
+DWORD    g_backDownAt    = 0;
+bool     g_backHoldSent  = false;
+bool     g_chordUsed     = false;   // Back used in a chord (with Start, A or B): suppress Back/Start actions
+DWORD    g_chordStart    = 0;
+bool     g_chordFired    = false;
+bool     g_initDone      = false;
+int      g_lastSlot      = -1;      // last face/D-pad slot pressed (set * 8 + button)
+bool     g_eaten[8]      = {};      // press used to place/cancel a ground spell: eat its release
 
 const DWORD kToggleHoldMs = 1000;
 const DWORD kModeResendMs = 10000;
 
-struct FaceMap { uint16_t bit; Signal slot; int nav; const char* name; };
+struct FaceMap { uint16_t bit; Signal slot; const char* name; };
 const FaceMap kFace[8] = {
-    { PAD_DPAD_UP,    SIG_DPAD_UP,    SIG_NAV_UP,      "DPadUp" },
-    { PAD_DPAD_DOWN,  SIG_DPAD_DOWN,  SIG_NAV_DOWN,    "DPadDown" },
-    { PAD_DPAD_LEFT,  SIG_DPAD_LEFT,  SIG_NAV_LEFT,    "DPadLeft" },
-    { PAD_DPAD_RIGHT, SIG_DPAD_RIGHT, SIG_NAV_RIGHT,   "DPadRight" },
-    { PAD_A,          SIG_A,          SIG_NAV_CONFIRM, "A" },
-    { PAD_B,          SIG_B,          SIG_NAV_BACK,    "B" },
-    { PAD_X,          SIG_X,          -1,              "X" },
-    { PAD_Y,          SIG_Y,          -1,              "Y" },
+    { PAD_DPAD_UP,    SIG_DPAD_UP,    "DPadUp" },
+    { PAD_DPAD_DOWN,  SIG_DPAD_DOWN,  "DPadDown" },
+    { PAD_DPAD_LEFT,  SIG_DPAD_LEFT,  "DPadLeft" },
+    { PAD_DPAD_RIGHT, SIG_DPAD_RIGHT, "DPadRight" },
+    { PAD_A,          SIG_A,          "A" },
+    { PAD_B,          SIG_B,          "B" },
+    { PAD_X,          SIG_X,          "X" },
+    { PAD_Y,          SIG_Y,          "Y" },
 };
 
 bool Hyst(bool held, float v, float on, float off) { return held ? v > off : v >= on; }
 
 void TapWait(DWORD ms);
+void ReleaseWarp();
+void SetWalking(bool walk);
+
 // Camera look under Proton: WoW keeps the real pointer at the window centre.
 // "No cursor image" alone isn't proof (the addon's blank cursor on the map can
 // look the same), so camera look = no cursor AND pointer at the centre.
@@ -98,6 +117,7 @@ bool PointerAtCentre() {
     long cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
     return labs(p.x - cx) <= 3 && labs(p.y - cy) <= 3;
 }
+
 void InitOnce() {
     if (g_initDone) return;
     for (int& h : g_heldSig) h = -1;
@@ -106,8 +126,6 @@ void InitOnce() {
 }
 
 // Release everything we hold and reset trigger state on the addon side.
-void ReleaseWarp();
-void SetWalking(bool walk);
 void ReleaseControllerState(bool tellAddon) {
     for (int i = 0; i < 8; ++i)
         if (g_heldSig[i] >= 0) { Signal_Up((Signal)g_heldSig[i]); g_heldSig[i] = -1; }
@@ -122,6 +140,11 @@ void ReleaseControllerState(bool tellAddon) {
     g_lt = g_rt = false;
     g_zoom = false;
     g_zoomAcc = 0;
+    g_cycle = 0;
+    g_cycleWant = 0;
+    g_ringHeld = -1;
+    g_ringDir = 0;
+    g_flickDir = 0;
     g_smX = g_smY = 0;
     g_camActive = false;
     CursorHide_Set(false);
@@ -129,19 +152,23 @@ void ReleaseControllerState(bool tellAddon) {
     Inject_ReleaseAll();
     for (bool& b : g_moveHeld) b = false;
     for (bool& b : g_clickHeld) b = false;
+    for (bool& b : g_eaten) b = false;
     g_accX = g_accY = 0;
 }
 
-// Pointer mode under Wayland: relative SendInput moves WoW's pointer, but the
-// compositor keeps drawing the hardware cursor where it was. A pointer that is
-// confined (ClipCursor) can be warped, and the drawn cursor follows, so while
-// the stick moves the pointer we keep it in a 1-pixel box and move the box.
+// Experimental [Cursor] PointerWarp option (off by default). Pointer mode under
+// Wayland: relative SendInput moves WoW's pointer, but the compositor keeps
+// drawing the hardware cursor where it was. A confined pointer (ClipCursor) can
+// be warped, so while the stick moves the pointer we keep it in a 1-pixel box
+// and move the box. In testing the drawn cursor still didn't follow; pointer
+// mode instead hides the real cursor and the addon draws its own.
 bool g_warpClip = false;
 void ReleaseWarp() {
     if (!g_warpClip) return;
     ClipCursor(nullptr);
     g_warpClip = false;
 }
+
 void WarpPointer(long x, long y) {
     RECT box = { x, y, x + 1, y + 1 };
     ClipCursor(&box);
@@ -157,8 +184,8 @@ void SendMode() {
 
 // Park the pointer where the crosshair should be: WoW freezes its hidden
 // pointer wherever it is when camera look starts.
-// SetCursorPos can be ignored under Wine (Wayland pointer warping), so move
-// there with relative SendInput motion, which is proven to work.
+// The two "Crosshair:" log lines are a troubleshooting aid: they show where
+// the pointer really ended up.
 void ParkPointer(const Config& c) {
     RECT r;
     if (!GameWindow_ClientRectScreen(&r)) return;
@@ -173,6 +200,8 @@ void ParkPointer(const Config& c) {
     POINT p;
     GetCursorPos(&p);
     Log_Write("Crosshair: pointer parked at %ld,%ld (target %ld,%ld)", p.x, p.y, tx, ty);
+    // Keep this wait: builds that changed it crashed the client (Error #132)
+    // after leaving pointer mode.
     Sleep(150);
     GetCursorPos(&p);
     Log_Write("Crosshair: 150 ms later pointer at %ld,%ld", p.x, p.y);
@@ -239,7 +268,7 @@ void UpdateTriggers(const ControllerState& s, const Config& c) {
     bool lt = Hyst(g_lt || g_clickHeld[MOUSE_RIGHT], s.lt, c.clickPressAt, c.clickReleaseAt);
     bool rt = Hyst(g_rt || g_clickHeld[MOUSE_LEFT],  s.rt, c.clickPressAt, c.clickReleaseAt);
     if (g_pointerMode) {
-        // Pointer mode: RT = left click, LT = right click (Phase 2 behaviour).
+        // Pointer mode: RT = left click, LT = right click.
         if (rt != g_clickHeld[MOUSE_LEFT])  { g_clickHeld[MOUSE_LEFT]  = rt; Inject_MouseButton(MOUSE_LEFT, rt); }
         if (lt != g_clickHeld[MOUSE_RIGHT]) { g_clickHeld[MOUSE_RIGHT] = lt; Inject_MouseButton(MOUSE_RIGHT, lt); }
         return;
@@ -293,6 +322,22 @@ void UpdateButtons(const ControllerState& s, const Config& c) {
         g_zoomAcc = 0;
         Signal_Tap(both ? SIG_ZOOM_ON : SIG_ZOOM_OFF);
     }
+    // One bumper held alone (not in pointer mode): the right stick flicks
+    // through targets instead of turning the camera (party cycle on the
+    // friendly bumper; the addon decides what each bumper's flicks do).
+    // Only after the bumper has been held a moment: a quick tap (targeting)
+    // must never stop the camera.
+    int want = 0;
+    if (c.bumperFlick && !both && !g_pointerMode)
+        want = (s.buttons & PAD_LB) ? 1 : (s.buttons & PAD_RB) ? 2 : 0;
+    if (want != g_cycleWant) { g_cycleWant = want; g_cycleSince = now; }
+    int cycle = (want && now - g_cycleSince >= kCycleHoldMs) ? want : 0;
+    if (cycle != g_cycle) {
+        g_cycle = cycle;
+        // Stick already tilted up/down when the hold starts (you were turning
+        // the camera): wait until it's back in the middle before flicking.
+        g_flickDir = (cycle && fabsf(s.ry) >= 0.3f) ? kFlickBlocked : 0;
+    }
 
     // Back + A / Back + B: real Enter / Esc keys. The chat box takes every key
     // while you type (the addon's bindings never fire there), but it does
@@ -313,7 +358,7 @@ void UpdateButtons(const ControllerState& s, const Config& c) {
     }
 
     // Back: tap = map, hold = bags. Start: on release. Both suppressed when
-    // used together as the kill-switch chord.
+    // used in a chord (Back+Start kill switch, Back+A/B).
     if (pressed & PAD_BACK) { g_backDownAt = now; g_backHoldSent = false; }
     if ((s.buttons & PAD_BACK) && !g_chordUsed && !g_backHoldSent && now - g_backDownAt >= (DWORD)c.backHoldMs) {
         Signal_Tap(SIG_BACK_HOLD);
@@ -324,8 +369,65 @@ void UpdateButtons(const ControllerState& s, const Config& c) {
     if (!(s.buttons & (PAD_BACK | PAD_START))) g_chordUsed = false;
 
     // Face buttons and D-pad: always slot signals (the addon decides what they do).
+    // Utility ring: the button on the ring's bar slot (in its trigger set).
+    int curSet = (g_lt && g_rt) ? 3 : g_lt ? 1 : g_rt ? 2 : 0;
     for (int i = 0; i < 8; ++i) {
         const FaceMap& f = kFace[i];
+        // Spell waiting for its location (the game shows its cast cursor): A or
+        // the same button again places it (left click at the crosshair), B
+        // cancels it (Esc). The press goes no further. Not with a window open
+        // (an enchant scroll used from the bags: A still navigates); the addon
+        // tells us by setting its blank cursor.
+        if (pressed & f.bit) {
+            int slotId = curSet * 8 + i;
+            bool same = slotId == g_lastSlot;
+            if (f.slot == SIG_A) same = true;   // A places too
+            bool aiming = !g_pointerMode && CursorHide_GroundTargeting();
+            bool veto = aiming && CursorHide_MenuVeto();
+            if (aiming && (same || f.slot == SIG_B) && veto)
+                Log_Write("MAP %s while aiming: window open, normal press", f.name);
+            if (aiming && !veto && (same || f.slot == SIG_B)) {
+                if (same) {
+                    // Camera look must be off first: in camera look a left click is
+                    // "both buttons" (a step forward) instead of placing the spell.
+                    // Same as the crosshair peek: hide the cursor, pause camera look.
+                    bool noPeek = c.peekDelayMs <= 0;   // peek off: camera look is always on
+                    if (g_camActive || noPeek) {
+                        CursorHide_Set(true);
+                        Signal_Tap(SIG_CAM_IDLE);
+                        g_camActive = false;
+                        g_accX = g_accY = 0;
+                        TapWait(60);          // let the game stop camera look
+                    }
+                    Inject_MouseButton(MOUSE_LEFT, true);
+                    TapWait(20);
+                    Inject_MouseButton(MOUSE_LEFT, false);
+                    if (noPeek) {             // nothing else will turn it back on
+                        TapWait(30);
+                        CursorHide_Set(false);
+                        Signal_Tap(SIG_CAM_ACTIVE);
+                    }
+                } else {
+                    Inject_Key(VK_ESCAPE, true);
+                    TapWait(20);
+                    Inject_Key(VK_ESCAPE, false);
+                }
+                g_eaten[i] = true;
+                Log_Write("MAP ground target %s (%s)", same ? "placed" : "cancelled", f.name);
+                continue;
+            }
+            g_lastSlot = slotId;
+        }
+        if (g_eaten[i]) {
+            if (released & f.bit) g_eaten[i] = false;
+            continue;
+        }
+        if ((pressed & f.bit) && c.ringSlot == curSet * 10 + (i + 1) && !g_pointerMode) {
+            g_ringHeld = i;
+            g_ringDir = 0;
+            g_ringCentreAt = now;
+        }
+        if ((released & f.bit) && g_ringHeld == i) g_ringHeld = -1;   // the slot's own key-up fires it
         if (pressed & f.bit) {
             // X in the default set: interact first (it may change target), then attack.
             if (f.slot == SIG_X && !g_lt && !g_rt) { Signal_Down(SIG_INTERACT); g_interactHeld = true; }
@@ -365,7 +467,7 @@ void CameraMotion(float x, float y, const Config& c, double dt) {
 
 void TapWait(DWORD ms) {
     const ControllerState* s = g_waitS;
-    bool camera = s && g_waitC && g_mode == MODE_CONTROLLER && !g_pointerMode && !g_zoom &&
+    bool camera = s && g_waitC && g_mode == MODE_CONTROLLER && !g_pointerMode && !g_zoom && g_ringHeld < 0 &&
                   (g_camActive || g_waitC->peekDelayMs <= 0) && (g_smX != 0.0f || g_smY != 0.0f);
     if (!camera) { Sleep(ms); return; }
     LARGE_INTEGER f, a, b;
@@ -380,6 +482,48 @@ void TapWait(DWORD ms) {
 }
 
 void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
+    if (g_ringHeld >= 0) {
+        // Ring held: the stick picks a wedge instead of turning the camera.
+        // Wedge 1 = up, clockwise. Centre only counts after 200 ms, so letting
+        // go of stick and button together keeps your pick.
+        g_accX = g_accY = 0;
+        g_smX = g_smY = 0;
+        DWORD now = GetTickCount();
+        float mag = sqrtf(s.rx * s.rx + s.ry * s.ry);
+        int dir = g_ringDir;
+        if (mag >= 0.5f) {
+            float ang = atan2f(s.rx, s.ry);                // 0 = up, clockwise positive
+            if (ang < 0) ang += 6.2831853f;
+            dir = (int)((ang + 0.3926991f) / 0.7853982f) % 8 + 1;
+            g_ringCentreAt = now;
+        } else if (mag < 0.25f && now - g_ringCentreAt >= 200) {
+            dir = 0;
+        } else if (mag >= 0.25f) {
+            g_ringCentreAt = now;
+        }
+        if (dir != g_ringDir) {
+            g_ringDir = dir;
+            Signal_Tap((Signal)(SIG_RING_DIR_0 + dir));
+        }
+        return;
+    }
+    if (g_cycle) {
+        // Flick: past 0.6 fires once, back under 0.3 re-arms; holding it
+        // repeats (first after 450 ms, then every 300 ms) to scroll the list.
+        // Only the stick's up/down is used: left/right keeps turning the
+        // camera below, so holding a bumper never freezes it.
+        DWORD now = GetTickCount();
+        int dir = s.ry <= -0.6f ? 1 : s.ry >= 0.6f ? -1 : 0;   // stick down = next
+        if (dir == 0 && fabsf(s.ry) < 0.3f) g_flickDir = 0;
+        if (dir != 0 && g_flickDir != kFlickBlocked && (dir != g_flickDir || now >= g_flickNext)) {
+            bool first = dir != g_flickDir;
+            g_flickDir = dir;
+            g_flickNext = now + (first ? 450 : 300);
+            Signal sig = g_cycle == 1 ? (dir > 0 ? SIG_LB_FLICK_DOWN : SIG_LB_FLICK_UP)
+                                      : (dir > 0 ? SIG_RB_FLICK_DOWN : SIG_RB_FLICK_UP);
+            Signal_Tap(sig);
+        }
+    }
     if (g_zoom) {
         // Zoom instead of turning: right stick up = zoom in (wheel away).
         g_accX = g_accY = 0;
@@ -390,7 +534,7 @@ void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
         Inject_MouseWheel(notches);
         return;
     }
-    float x = s.rx, y = s.ry;
+    float x = s.rx, y = g_cycle ? 0.0f : s.ry;   // party cycle borrows up/down
     if (c.camSmooth && !g_pointerMode) {
         // Smooth camera: ease the stick value (exponential, SmoothMs time
         // constant) so turning glides between the game's frames.
@@ -412,13 +556,14 @@ void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
             POINT p = {};
             GetCursorPos(&p);
             // Verified under Proton: during camera look Windows reports no cursor
-            // (hCursor NULL); in menus there is one. Pointer-frozen as a fallback.
+            // (hCursor NULL, with the pointer at the centre); in menus there is
+            // one. Pointer-frozen as a fallback.
             CURSORINFO ci = {};
             ci.cbSize = sizeof(ci);
             GetCursorInfo(&ci);
             bool camera = (ci.hCursor == nullptr && PointerAtCentre()) ||
                           (g_movedMotion && p.x == g_activeStartPt.x && p.y == g_activeStartPt.y);
-            if (c.logButtons)
+            if (c.logButtons)   // debug aid
                 Log_Write("PEEK %s (pointer %ld,%ld -> %ld,%ld, hCursor %p)", camera ? "camera: hiding cursor" : "menu: no peek",
                           g_activeStartPt.x, g_activeStartPt.y, p.x, p.y, (void*)ci.hCursor);
             if (camera) { CursorHide_Set(true); Sleep(20); } // hide BEFORE the game shows its cursor
@@ -459,7 +604,7 @@ void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
         if (ty < r.top) ty = r.top;   else if (ty > r.bottom - 1) ty = r.bottom - 1;
         dx = (int)(tx - p.x); dy = (int)(ty - p.y);
     }
-    if (pointer && c.pointerWarp) WarpPointer(tx, ty);   // visible cursor follows (Wayland)
+    if (pointer && c.pointerWarp) WarpPointer(tx, ty);   // experimental PointerWarp option
     else Inject_MouseMove(dx, dy);
     g_movedMotion = true;
 }
@@ -467,7 +612,7 @@ void UpdatePointer(const ControllerState& s, const Config& c, double dt) {
 bool PadActive(const ControllerState& s) {
     return s.connected && (s.buttons || s.lx || s.ly || s.rx || s.ry || s.lt > 0.0f || s.rt > 0.0f);
 }
-}
+} // namespace
 
 void Mapper_Reset() {
     InitOnce();
@@ -486,6 +631,8 @@ void Mapper_Update(const ControllerState& s, double dt) {
     if (as.peekDelayMs > 0) c.peekDelayMs  = as.peekDelayMs;
     c.walkRun = as.walkRun;
     c.camSmooth = as.camSmooth;
+    c.bumperFlick = as.bumperFlick;
+    c.ringSlot = as.ringSlot;
     GameWindow_Get();
 
     CursorHide_Install(GameWindow_Get());
@@ -527,7 +674,7 @@ void Mapper_Update(const ControllerState& s, double dt) {
             Signal_Tap(SIG_CAM_IDLE);
             Sleep(60);                 // let the game stop camera look
             ParkPointer(c);
-            if (c.logButtons) Log_Write("Crosshair: camera resumed, re-centred");
+            if (c.logButtons) Log_Write("Crosshair: camera resumed, re-centred");   // debug aid
         }
         g_prevNoCursor = noCursor;
     }

@@ -8,6 +8,8 @@
 --  * A / X click the selected node through secure buttons (type "click"), so
 --    protected things like using a bag item or selling to a vendor work.
 --    B presses the window's own close button the same way.
+--  * Y: tap = preview, hold = compare. L3 in bags: item actions. LB/RB:
+--    switch window, or page the main menu / setup window / keyboard.
 
 local WP = WowPad
 local Nav = { roots = {}, nodes = {}, nodeSet = {} }
@@ -154,6 +156,7 @@ local function DefaultNode(nodes)
   return best
 end
 
+-- Nearest node from cur in direction (dx, dy), favouring nodes straight ahead.
 local function Pick(cur, nodes, dx, dy)
   local cx, cy = Center(cur)
   if not cx then return nil end
@@ -198,8 +201,6 @@ local function CallScript(f, script)
   if fn then pcall(fn, f) end
 end
 
--- The item on the selected button: bag slots directly, anything else (vendor,
--- loot, quest rewards, character...) from the tooltip its OnEnter showed.
 -- Is this button part of a bag window? Default bags, the bank, and bag
 -- addons (Bagnon, Combuctor, ArkInventory, AdiBags...) by their frame names.
 local function InBags(n)
@@ -216,6 +217,9 @@ local function InBags(n)
   return false
 end
 
+-- The item on the selected button: bag slots directly, anything else (vendor,
+-- loot, quest rewards, character...) from the tooltip its OnEnter showed.
+-- Returns link, and bag, slot when the item is in your bags.
 function Nav.FocusedItem()
   local n = Nav.cur
   if not n then return end
@@ -246,7 +250,7 @@ function Nav.FocusedItem()
   return link
 end
 
--- /wp navinfo: what the selection is (for bug reports).
+-- /wp navinfo (debug / troubleshooting aid): what the selection is, for bug reports.
 function Nav.Info()
   local n = Nav.cur
   local p = n and n.GetParent and n:GetParent()
@@ -296,7 +300,8 @@ function Nav.Preview()
   if Dressable(link) then DressUpItemLink(link) end
 end
 
--- L3: destroy the selected bag item, after a confirmation (Cancel is selected).
+-- Destroy the selected bag item, after a confirmation (Cancel is preselected).
+-- Used by the L3 item-actions window (or directly by L3 if that isn't loaded).
 StaticPopupDialogs.WOWPAD_DESTROY = {
   text = "Destroy %s?",
   button1 = DELETE or "Destroy",
@@ -402,7 +407,9 @@ local FRIENDLY = {
   FriendsFrame = "Social", GossipFrame = "Gossip", QuestFrame = "Quest", LootFrame = "Loot",
   BankFrame = "Bank", MailFrame = "Mail", TradeFrame = "Trade", AuctionFrame = "Auction House",
   ClassTrainerFrame = "Trainer", TaxiFrame = "Flight Map", GameMenuFrame = "Game Menu",
-  DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu", WowPadInfo = "Controller Map", WowPadItemActions = "Item", WowPadFirstTime = "Setup", DGossipFrame = "Gossip", DQuestFrame = "Quest",
+  DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu",
+  WowPadInfo = "Controller Map", WowPadItemActions = "Item", WowPadFirstTime = "Setup",
+  WowPadKeyboard = "Keyboard", DGossipFrame = "Gossip", DQuestFrame = "Quest",
 }
 local function WindowName(f)
   local n = f and f:GetName()
@@ -437,10 +444,15 @@ function Nav.UpdateHints()
     local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
     parts = { K:format("A", "Select"), K:format("X", vendorOpen and "Sell" or "Use"),
               K:format("Y", "Preview, hold: Compare"), K:format("L3", "Item actions"), K:format("B", "Close") }
+  elseif root == WP.Keyboard then
+    parts = { K:format("A", "Type"), K:format("X", "Capital"), K:format("Y", "Space"), K:format("B", "Delete"),
+              K:format("LB/RB", "Channel"), K:format("Start", "Send") }
   elseif root == LFDDungeonReadyDialog then
     parts = { K:format("A", "Select"), K:format("B", "Leave Queue") }
   elseif (root:GetName() or ""):find("^GroupLootFrame%d") then
-    parts = { K:format("A", "Roll"), K:format("B", "Pass") }
+    parts = { K:format("A", "Roll"), K:format("Y", "Preview, hold: Compare"), K:format("B", "Pass") }
+  elseif root == QuestLogFrame then
+    parts = { K:format("A", "Select"), K:format("X", "Track / untrack"), K:format("B", "Close") }
   else
     -- Everything else: only what applies everywhere.
     parts = { K:format("A", "Select"), K:format("B", "Close") }
@@ -497,8 +509,6 @@ local function Active()
   return WP.mode == "controller" and WP.ctx == "menu" and WP.set == 0 and not InCombatLockdown()
 end
 
--- DialogUI's quest frame grabs the keyboard for its own shortcuts (Space,
--- 1-9), which swallows the pad's keys. In controller mode, let them through.
 -- Some addon windows (DialogUI) keep invisible, clickable buttons around
 -- (unused option slots, helper buttons). In those windows, only buttons that
 -- show something (text or a visible picture) count as stops.
@@ -521,6 +531,8 @@ local function ShowsSomething(b)
   return false
 end
 
+-- DialogUI's quest frame grabs the keyboard for its own shortcuts (Space,
+-- 1-9), which swallows the pad's keys. In controller mode, let them through.
 local function ReleaseKeyboardGrabs()
   if WP.mode ~= "controller" then return end
   local q = _G.DQuestFrame
@@ -538,8 +550,8 @@ function Nav.Refresh()
   for _, r in ipairs(Nav.roots) do if r == Nav.root then stillOpen = true end end
   if top ~= lastTop or not stillOpen then
     Nav.root = top                       -- new window on top grabs focus
-    -- Start on the window's default button (as before the map cursor), not
-    -- wherever the hidden pointer happens to be (the crosshair spot).
+    -- Start on the window's default button, not wherever the hidden pointer
+    -- happens to be (the crosshair spot).
     Nav.byDpad = true
     Nav.Select(nil)
     lastMX, lastMY = GetCursorPosition()
@@ -590,6 +602,7 @@ function Nav.Refresh()
     if Nav.root and Nav.root.which == "WOWPAD_DESTROY" then pref = { _G[rn .. "Button2"] }
     elseif rn == "WowPadItemActions" then pref = { WowPadItemActionsCancel }
     elseif rn == "WowPadFirstTime" then pref = { WowPadFirstTimeNext }
+    elseif rn == "WowPadKeyboard" then pref = { WP.Keyboard.firstKey }
     elseif rn == "DGossipFrame" then pref = { _G.DGossipTitleButton1 }
     elseif rn == "DQuestFrame" then
       pref = { _G.DQuestFrameAcceptButton, _G.DQuestFrameCompleteButton, _G.DQuestFrameCompleteQuestButton }
@@ -692,8 +705,39 @@ function Nav.CycleRoot(step)
   Nav.Refresh()
 end
 
+-- Quest log, X: track / untrack the quest on the selected row (or, off the
+-- list, the quest shown on the right). Same as the log's Track button.
+function Nav.TrackQuest(n)
+  local idx
+  local nm = n and n.GetName and n:GetName() or ""
+  if n and n.GetID and (nm:find("^QuestLogScrollFrameButton%d") or nm:find("^QuestLogTitle%d")) then
+    idx = n:GetID()
+  end
+  if not idx or idx < 1 then idx = GetQuestLogSelection() end
+  if not idx or idx < 1 then return end
+  local title, _, _, _, isHeader = GetQuestLogTitle(idx)
+  if not title or isHeader then return end
+  if SelectQuestLogEntry then SelectQuestLogEntry(idx) end
+  if IsQuestWatched(idx) then
+    RemoveQuestWatch(idx)
+  else
+    local max = MAX_WATCHABLE_QUESTS or 25
+    if GetNumQuestWatches() >= max then
+      if UIErrorsFrame and QUEST_WATCH_TOO_MANY then
+        UIErrorsFrame:AddMessage(QUEST_WATCH_TOO_MANY:format(max), 1, 0.1, 0.1, 1)
+      end
+      return
+    end
+    AddQuestWatch(idx)
+  end
+  if WatchFrame_Update then WatchFrame_Update() end
+  if QuestLog_Update then QuestLog_Update() end
+end
+
 -- What B should press. Closes our own windows / dropdowns directly.
 function Nav.BackTarget()
+  -- Keyboard: B deletes a letter (on an empty line it closes).
+  if WP.Keyboard and WP.Keyboard:IsShown() then return WP.Keyboard.deleteKey end
   for _, o in ipairs(WP.overlays) do
     if o:IsShown() then o:Hide(); return nil end
   end
@@ -739,6 +783,18 @@ function Nav.BackTarget()
       end
     end
     if close then return close end
+    -- Esc menu: B = Return to Game. Options windows: B = Cancel.
+    local cancel = (name == "GameMenuFrame" and _G.GameMenuButtonContinue)
+                or _G[name .. "Cancel"] or _G[name .. "CancelButton"]
+    if not (cancel and cancel:IsVisible()) then
+      cancel = nil
+      for _, c in ipairs({ root:GetChildren() }) do
+        local n = c:GetName()
+        if n and (n:find("Cancel$") or n:find("CancelButton$")) and c:IsVisible()
+           and c:GetObjectType() == "Button" then cancel = c; break end
+      end
+    end
+    if cancel then return cancel end
   end
   if name and name:find("^ContainerFrame") then CloseAllBags() end
   return nil
@@ -768,6 +824,10 @@ do
     end
   end)
   cmp:SetScript("OnClick", function(_, _, down)
+    if WP.Keyboard and WP.Keyboard:IsShown() then   -- keyboard: Y = space
+      if down ~= false and Active() then WP.Keyboard.Space() end
+      return
+    end
     if down ~= false then
       heldFor = 0
     else
@@ -784,9 +844,11 @@ IB("WowPadNavDestroy", function()
   if not Active() then return end
   if WP.OpenItemActions then WP.OpenItemActions() else Nav.Destroy() end
 end)
--- LB/RB: pages of the radial / setup window, else switch windows.
+-- LB/RB: pages of the main menu / setup window (channel on the keyboard),
+-- else switch windows.
 local function Paged() return (WP.Radial and WP.Radial:IsShown() and WP.Radial)
-                           or (WP.FirstTime and WP.FirstTime:IsShown() and WP.FirstTime) end
+                           or (WP.FirstTime and WP.FirstTime:IsShown() and WP.FirstTime)
+                           or (WP.Keyboard and WP.Keyboard:IsShown() and WP.Keyboard) end
 IB("WowPadNavPrev",  function() local p = Paged() if p then p.Page(-1) else Nav.CycleRoot(-1) end end)
 IB("WowPadNavNext",  function() local p = Paged() if p then p.Page(1) else Nav.CycleRoot(1) end end)
 
@@ -804,6 +866,12 @@ table.insert(WP.setupHooks, function()
       -- Done here directly (the map isn't protected), not via a click.
       if Nav.root == WorldMapFrame and not (Nav.byDpad and n and n ~= WorldMapButton) then
         Nav.MapClick(button)
+        self:SetAttribute("clickbutton", nil)
+        return
+      end
+      -- Quest log: X tracks / untracks the quest (selecting its row first).
+      if button == "RightButton" and QuestLogFrame and Nav.root == QuestLogFrame then
+        Nav.TrackQuest(n)
         self:SetAttribute("clickbutton", nil)
         return
       end
@@ -827,38 +895,3 @@ table.insert(WP.setupHooks, function()
     self:SetAttribute("clickbutton", Nav.BackTarget())
   end)
 end)
-
----------------------------------------------------------------------------
--- Chat box: while you type it takes every key, so the pad's own A/B never
--- reach the addon. The DLL sends real Enter/Esc for Back+A / Back+B, which
--- the box understands. Here: just a hint above the box in controller mode.
----------------------------------------------------------------------------
-do
-  local chatHint
-  local function Hook(box)
-    if not box or box.wowpadHooked then return end
-    box.wowpadHooked = true
-    box:HookScript("OnEditFocusGained", function(self)
-      if WP.mode ~= "controller" then return end
-      if not chatHint then
-        chatHint = CreateFrame("Frame", "WowPadChatHint", UIParent)
-        chatHint:SetSize(260, 20)
-        chatHint:SetFrameStrata("TOOLTIP")
-        local t = chatHint:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        t:SetPoint("LEFT")
-        t:SetText("|cffffd100Back + A|r Send     |cffffd100Back + B|r Close")
-      end
-      chatHint:ClearAllPoints()
-      chatHint:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 6, 2)
-      chatHint:Show()
-    end)
-    box:HookScript("OnEditFocusLost", function() if chatHint then chatHint:Hide() end end)
-  end
-
-  local f = CreateFrame("Frame")
-  f:RegisterEvent("PLAYER_LOGIN")
-  f:SetScript("OnEvent", function()
-    Hook(_G.ChatFrameEditBox)
-    for i = 1, NUM_CHAT_WINDOWS or 10 do Hook(_G["ChatFrame" .. i .. "EditBox"]) end
-  end)
-end

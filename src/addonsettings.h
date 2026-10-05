@@ -6,13 +6,15 @@
 #pragma once
 
 struct AddonSettings {
-    float camScale   = 1.0f;  // x [Camera] Speed
-    float ptrScale   = 1.0f;  // x [Cursor] Speed
-    float zoomScale  = 1.0f;  // x [Camera] ZoomSpeed
-    int   invertY    = -1;    // -1 = use wowpad.ini, 0/1 = override
-    int   peekDelayMs = 0;    // 0 = use wowpad.ini
-    bool  walkRun    = false; // walk on slight tilt, run on full tilt (experimental)
-    bool  camSmooth  = false; // smooth camera turning (experimental)
+    float camScale    = 1.0f;  // x [Camera] Speed
+    float ptrScale    = 1.0f;  // x [Cursor] Speed
+    float zoomScale   = 1.0f;  // x [Camera] ZoomSpeed
+    int   invertY     = -1;    // -1 = use wowpad.ini, 0/1 = override
+    int   peekDelayMs = 0;     // 0 = use wowpad.ini
+    bool  walkRun     = false; // walk on slight tilt, run on full tilt (experimental)
+    bool  camSmooth   = false; // smooth camera turning (experimental)
+    int   ringSlot    = 0;     // utility ring on bar slot set*10+i (0 = none)
+    bool  bumperFlick = false; // healer mode: bumper held + right stick flicks pick party members
 };
 
 // Starts a background thread that re-reads the file when it changes (once a

@@ -7,5 +7,3 @@ void Log_Write(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 
 // Directory containing the host exe (Wow.exe), with trailing backslash.
 const wchar_t* GameDirW();
-// Same, UTF-8, for log output.
-const char* GameDirUtf8();

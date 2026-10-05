@@ -8,10 +8,10 @@
 // Load order for the real DLL (first one that is not ourselves wins):
 //   1. <game dir>\version_orig.dll   (escape hatch, see README)
 //   2. <system dir>\version.dll
-// WINE BEHAVIOUR TO VERIFY: with WINEDLLOVERRIDES="version=n,b", whether
-// LoadLibrary on system32\version.dll yields Wine's builtin or hands back our
-// already-loaded module. We detect the latter and log it; wowpad.log will say
-// which path was used. If (2) fails, use (1).
+// Under Wine with WINEDLLOVERRIDES="version=n,b", LoadLibrary on
+// system32\version.dll may hand back our own already-loaded module instead of
+// Wine's builtin; TryLoad rejects that. wowpad.log says which path was used.
+// If (2) fails, use (1).
 #include <windows.h>
 #include <stdio.h>
 #include <wchar.h>
@@ -64,12 +64,12 @@ static FARPROC Real(const char* name) {
 }
 
 // FWD(ret, failValue, name, (params), (args))
-#define FWD(RET, FAIL, NAME, PARAMS, ARGS)                                  \
-    extern "C" RET WINAPI proxy_##NAME PARAMS {                             \
-        typedef RET(WINAPI * fn_t) PARAMS;                                  \
-        static fn_t real_fn = (fn_t)Real(#NAME);                                 \
-        if (!real_fn) { SetLastError(ERROR_PROC_NOT_FOUND); return FAIL; }       \
-        return real_fn ARGS;                                                    \
+#define FWD(RET, FAIL, NAME, PARAMS, ARGS)                                 \
+    extern "C" RET WINAPI proxy_##NAME PARAMS {                            \
+        typedef RET(WINAPI * fn_t) PARAMS;                                 \
+        static fn_t real_fn = (fn_t)Real(#NAME);                           \
+        if (!real_fn) { SetLastError(ERROR_PROC_NOT_FOUND); return FAIL; } \
+        return real_fn ARGS;                                               \
     }
 
 FWD(BOOL,  FALSE, GetFileVersionInfoA,

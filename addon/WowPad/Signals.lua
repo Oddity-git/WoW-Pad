@@ -1,4 +1,5 @@
--- Signals.lua - keys the wowpad DLL presses, by signal.
+-- Signals.lua - the key the wowpad DLL presses for each signal, plus the slot
+-- and set names shared by the other files.
 -- MUST match kSignals in src/signals.cpp (scripts/check_signals.py verifies).
 -- Order here mirrors the C enum.
 
@@ -39,8 +40,22 @@ WowPad.SIGNAL_KEYS = {
   { "POINTER_ON",      "ALT-CTRL-SHIFT-F3" },
   { "POINTER_OFF",     "ALT-CTRL-SHIFT-F4" },
   { "WALK_TOGGLE",     "ALT-CTRL-SHIFT-F9" },
+  { "LB_FLICK_DOWN",   "ALT-CTRL-NUMPADDIVIDE" },
+  { "LB_FLICK_UP",     "ALT-CTRL-NUMPADMULTIPLY" },
+  { "RB_FLICK_DOWN",   "ALT-CTRL-NUMPADMINUS" },
+  { "RB_FLICK_UP",     "ALT-CTRL-NUMPADPLUS" },
+  { "RING_DIR_0",      "CTRL-SHIFT-F1" },
+  { "RING_DIR_1",      "CTRL-SHIFT-F2" },
+  { "RING_DIR_2",      "CTRL-SHIFT-F3" },
+  { "RING_DIR_3",      "CTRL-SHIFT-F4" },
+  { "RING_DIR_4",      "CTRL-SHIFT-F5" },
+  { "RING_DIR_5",      "CTRL-SHIFT-F6" },
+  { "RING_DIR_6",      "CTRL-SHIFT-F7" },
+  { "RING_DIR_7",      "CTRL-SHIFT-F8" },
+  { "RING_DIR_8",      "CTRL-SHIFT-F9" },
 }
 
+-- Signal name -> key, e.g. WowPad.KEY.LB.
 WowPad.KEY = {}
 for _, e in ipairs(WowPad.SIGNAL_KEYS) do WowPad.KEY[e[1]] = e[2] end
 

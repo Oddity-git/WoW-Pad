@@ -1,3 +1,4 @@
+// gamewindow.cpp - finds and caches the game's main window.
 #include "gamewindow.h"
 #include "log.h"
 
@@ -19,7 +20,7 @@ BOOL CALLBACK EnumCb(HWND h, LPARAM lp) {
 HWND  g_cached  = nullptr;
 DWORD g_lastTry = 0;
 bool  g_tried   = false;
-}
+} // namespace
 
 HWND GameWindow_Get() {
     if (g_cached && IsWindow(g_cached)) return g_cached;

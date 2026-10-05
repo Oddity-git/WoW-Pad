@@ -1,8 +1,10 @@
+// signals.cpp - signal key table and the key presses that send a signal.
 #include "signals.h"
 #include "inject.h"
 
 #define A_C  (SMOD_ALT | SMOD_CTRL)
 #define A_CS (SMOD_ALT | SMOD_CTRL | SMOD_SHIFT)
+#define C_S  (SMOD_CTRL | SMOD_SHIFT)
 
 const SignalKey kSignals[SIG_COUNT] = {
     /* SIG_DPAD_UP        */ { "NUMPAD8",            VK_NUMPAD8,  0 },
@@ -39,6 +41,19 @@ const SignalKey kSignals[SIG_COUNT] = {
     /* SIG_POINTER_ON     */ { "ALT-CTRL-SHIFT-F3",  VK_F3,       A_CS },
     /* SIG_POINTER_OFF    */ { "ALT-CTRL-SHIFT-F4",  VK_F4,       A_CS },
     /* SIG_WALK_TOGGLE    */ { "ALT-CTRL-SHIFT-F9",  VK_F9,       A_CS },
+    /* SIG_LB_FLICK_DOWN  */ { "ALT-CTRL-NUMPADDIVIDE",   VK_DIVIDE,   A_C },
+    /* SIG_LB_FLICK_UP    */ { "ALT-CTRL-NUMPADMULTIPLY", VK_MULTIPLY, A_C },
+    /* SIG_RB_FLICK_DOWN  */ { "ALT-CTRL-NUMPADMINUS",    VK_SUBTRACT, A_C },
+    /* SIG_RB_FLICK_UP    */ { "ALT-CTRL-NUMPADPLUS",     VK_ADD,      A_C },
+    /* SIG_RING_DIR_0     */ { "CTRL-SHIFT-F1",      VK_F1,       C_S },
+    /* SIG_RING_DIR_1     */ { "CTRL-SHIFT-F2",      VK_F2,       C_S },
+    /* SIG_RING_DIR_2     */ { "CTRL-SHIFT-F3",      VK_F3,       C_S },
+    /* SIG_RING_DIR_3     */ { "CTRL-SHIFT-F4",      VK_F4,       C_S },
+    /* SIG_RING_DIR_4     */ { "CTRL-SHIFT-F5",      VK_F5,       C_S },
+    /* SIG_RING_DIR_5     */ { "CTRL-SHIFT-F6",      VK_F6,       C_S },
+    /* SIG_RING_DIR_6     */ { "CTRL-SHIFT-F7",      VK_F7,       C_S },
+    /* SIG_RING_DIR_7     */ { "CTRL-SHIFT-F8",      VK_F8,       C_S },
+    /* SIG_RING_DIR_8     */ { "CTRL-SHIFT-F9",      VK_F9,       C_S },
 };
 
 void Signal_Down(Signal s) {

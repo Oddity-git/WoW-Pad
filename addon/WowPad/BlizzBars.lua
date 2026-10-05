@@ -2,8 +2,8 @@
 --
 -- Frames are re-parented to a hidden frame instead of :Hide()-ing them, so
 -- Blizzard code that calls :Show() on them later (vehicle exit, level up,
--- stance change...) can't bring them back. The vehicle bar is left alone so
--- vehicles keep working. Your keybinds for the hidden bars still work.
+-- stance change...) can't bring them back. The vehicle bar and the Leave
+-- Vehicle button are left alone so vehicles keep working. Your keybinds for the hidden bars still work.
 -- Only changed out of combat (the bars contain protected buttons).
 
 local WP = WowPad
@@ -20,8 +20,10 @@ local FRAMES = {
   "PetActionBarFrame",
   "PossessBarFrame",
   "BonusActionBarFrame",    -- warrior stances, druid forms, rogue stealth bar
-  "MainMenuBarVehicleLeaveButton",
 }
+-- Kept visible: vehicles without the full vehicle UI only have this button
+-- to get out. It may belong to MainMenuBar, so it is moved to UIParent.
+local LEAVE = "MainMenuBarVehicleLeaveButton"
 
 local original = {}         -- frame -> original parent
 
@@ -36,6 +38,15 @@ local function Apply(hide)
       elseif original[f] then
         f:SetParent(original[f])
       end
+    end
+  end
+  local leave = _G[LEAVE]
+  if leave then
+    if hide then
+      if not original[leave] then original[leave] = leave:GetParent() end
+      leave:SetParent(UIParent)
+    elseif original[leave] then
+      leave:SetParent(original[leave])
     end
   end
   return true

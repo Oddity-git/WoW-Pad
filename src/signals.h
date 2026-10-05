@@ -3,7 +3,7 @@
 // Each signal is a key the addon has bound. MUST match SIGNAL_KEYS in
 // addon/WowPad/Signals.lua (scripts/check_signals.py verifies).
 //
-// Rules from the Phase 3a probe:
+// Rules found by testing in the client:
 //  - Anything that can CAST uses an unmodified numpad key (Alt = self-cast,
 //    modifiers would also flip [mod:] macro conditions).
 //  - F13-F24 / ScrollLock / Pause never arrive; not used.
@@ -28,6 +28,13 @@ enum Signal {
     SIG_MODE_CONTROLLER, SIG_MODE_DESKTOP, SIG_POINTER_ON, SIG_POINTER_OFF,
     // Game's Run/Walk toggle (TOGGLERUN), for walk-on-slight-tilt (optional).
     SIG_WALK_TOGGLE,
+    // Bumper held alone + right stick flick down / up (party cycle; modified, non-cast:
+    // the addon's secure buttons do the targeting).
+    SIG_LB_FLICK_DOWN, SIG_LB_FLICK_UP, SIG_RB_FLICK_DOWN, SIG_RB_FLICK_UP,
+    // Utility ring held: which wedge the right stick points at (0 = centre,
+    // 1 = up, then clockwise). Non-cast state signals (modified).
+    SIG_RING_DIR_0, SIG_RING_DIR_1, SIG_RING_DIR_2, SIG_RING_DIR_3, SIG_RING_DIR_4,
+    SIG_RING_DIR_5, SIG_RING_DIR_6, SIG_RING_DIR_7, SIG_RING_DIR_8,
     SIG_COUNT
 };
 

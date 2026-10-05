@@ -1,3 +1,4 @@
+// addonsettings.cpp - watches the addon's SavedVariables file for its options.
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,12 +80,14 @@ void Load(const wchar_t* path) {
     if (buf && ReadFile(f, buf, size, &got, nullptr)) {
         buf[got] = 0;
         AddonSettings s;
-        s.camScale = ReadNum(buf, "wpCamSens", 1.0f, 0.05f, 3.0f);
-        s.ptrScale = ReadNum(buf, "wpPtrSens", 1.0f, 0.05f, 3.0f);
-        s.zoomScale = ReadNum(buf, "wpZoomSens", 1.0f, 0.05f, 3.0f);
-        s.invertY  = ReadBool(buf, "wpInvertY");
-        s.walkRun  = ReadBool(buf, "wpWalkRun") == 1;
-        s.camSmooth = ReadBool(buf, "wpCamSmooth") == 1;
+        s.camScale    = ReadNum(buf, "wpCamSens", 1.0f, 0.05f, 3.0f);
+        s.ptrScale    = ReadNum(buf, "wpPtrSens", 1.0f, 0.05f, 3.0f);
+        s.zoomScale   = ReadNum(buf, "wpZoomSens", 1.0f, 0.05f, 3.0f);
+        s.invertY     = ReadBool(buf, "wpInvertY");
+        s.walkRun     = ReadBool(buf, "wpWalkRun") == 1;
+        s.camSmooth   = ReadBool(buf, "wpCamSmooth") == 1;
+        s.bumperFlick = ReadBool(buf, "wpBumperFlick") == 1;   // default off
+        s.ringSlot    = (int)ReadNum(buf, "wpRingSlot", 0.0f, 0.0f, 38.0f);
         s.peekDelayMs = (int)ReadNum(buf, "wpPeekDelay", 0.0f, 0.0f, 2000.0f);
         if (s.peekDelayMs && s.peekDelayMs < 50) s.peekDelayMs = 50;
         EnterCriticalSection(&g_lock);
@@ -94,12 +97,14 @@ void Load(const wchar_t* path) {
                   s.camScale, s.ptrScale, s.zoomScale, s.invertY < 0 ? "(ini)" : (s.invertY ? "on" : "off"),
                   s.peekDelayMs ? "set" : "(ini)");
         if (s.peekDelayMs) Log_Write("  peek delay %d ms", s.peekDelayMs);
-        Log_Write("  walk/run on stick tilt: %s, smooth camera: %s", s.walkRun ? "on" : "off", s.camSmooth ? "on" : "off");
+        Log_Write("  walk/run on stick tilt: %s, smooth camera: %s, healer mode: %s",
+                  s.walkRun ? "on" : "off", s.camSmooth ? "on" : "off", s.bumperFlick ? "on" : "off");
+        if (s.ringSlot) Log_Write("  utility ring on slot %d_%d", s.ringSlot / 10, s.ringSlot % 10);
     }
     free(buf);
     CloseHandle(f);
 }
-}
+} // namespace
 
 static void Poll() {
     wchar_t path[MAX_PATH * 2];

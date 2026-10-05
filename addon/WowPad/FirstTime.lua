@@ -8,6 +8,13 @@ local WP = WowPad
 
 -- Newest first. Shown on the last page.
 local WHATS_NEW = {
+  { "1.4.0", {
+    "On-screen keyboard for chat: Back + A (Say, Party, Guild, Raid, Reply with LB / RB)",
+    "Healer mode (Options > Buttons): pick party members with the ally bumper + right stick, in combat too",
+    "Utility ring: 8 spells/items on one button (Options > Bars), point the right stick, let go to use",
+    "Ground-targeted spells: A or the same button places them, B cancels",
+    "Quest log: X tracks / untracks a quest.  B leaves the Esc menu and option windows",
+  } },
   { "1.3.1", {
     "This setup window: checks your setup and shows what's new (/wp firsttime)",
     "Works with DialogUI and DragonUI New Era windows",
@@ -21,12 +28,7 @@ local WHATS_NEW = {
     "Lite bar: one action set at a time (Options > Bars)",
     "Windows remember your selection; option to swap LB/RB targeting",
   } },
-  { "1.2.0", {
-    "Minimap button: left-click edit layout, right-click options",
-    "Edit mode snaps bars to the screen's centre line",
-    "Separate XP and reputation bars",
-  } },
-}
+}  -- newest first; keep about three versions so the page fits the window
 
 local OK   = "|TInterface\\RaidFrame\\ReadyCheck-Ready:16|t "
 local WARN = "|TInterface\\RaidFrame\\ReadyCheck-Waiting:16|t "
@@ -169,6 +171,9 @@ local PAGES = {
       Y:format("D-pad") .. ": 4 action slots.  Hold " .. Y:format("LT") .. ", " .. Y:format("RT") .. " or "
         .. Y:format("both") .. " for 8 more slots each.",
       Y:format("LB / RB") .. ": target nearest friend / enemy.  Hold both: right stick zooms.",
+      Y:format("Healer mode") .. " (off by default, Options > Buttons): tap your ally bumper ("
+        .. ((WowPadDB and WowPadDB.swapBumpers) and "RB" or "LB") .. ") for your last party pick,",
+      "hold it + flick the right stick down / up for the next / previous party member. Works in combat.",
       Y:format("Start") .. ": close windows, radial main menu.  " .. Y:format("Back") .. ": map (hold: bags).",
       Y:format("R3") .. ": pointer mode (RT / LT click).  " .. Y:format("L3") .. ": autorun.",
       " ",
@@ -185,20 +190,24 @@ local PAGES = {
       Y:format("Options") .. " (right-click the minimap button, or /wp options):",
       "  -  Camera sensitivity, pointer speed, invert camera, smooth camera",
       "  -  Walk on slight stick tilt, run on full tilt",
+      "  -  Healer mode (off by default): pick party members with the bumper + right stick",
       "  -  Swap LB / RB targeting,  X also starts attacking",
       "  -  Crosshair dot and crosshair tooltips",
       " ",
       Y:format("Options > WowPad > Bars") .. ":",
       "  -  Lite mode: one action set on screen, triggers swap it in",
+      "  -  Utility ring: pick a button for it, fill its 8 wedges in Edit bar layout",
       "  -  Hide Blizzard's action bars, bar size, always visible",
       "  -  WowPad's XP, reputation, pet and cast bars (turn off to use another addon's)",
       "  -  Minimap button",
     }, "\n") end, buttons = { actEdit, actOptions } },
   { title = "Good to know", text = function() return table.concat({
-      Y:format("Chat:") .. " Back + A sends (or opens chat), Back + B closes it. There's no on-screen keyboard;",
-      "type with a keyboard or your system's own (e.g. Steam Deck).",
+      Y:format("Chat:") .. " Back + A opens the on-screen keyboard (A type, X capital, Y space, B delete,",
+      "LB / RB channel, Start or Back + A send). Back + B closes it. A real keyboard works as usual.",
       " ",
       Y:format("Bags:") .. " L3 on an item: Disenchant / Destroy / Cancel.  Y: preview, hold to compare.",
+      Y:format("Ground spells") .. " (Blizzard, Flare...): A or the same button places them, B cancels.",
+      "Let the camera come to rest before placing.",
       " ",
       Y:format("Crosshair stuck somewhere odd?") .. " Press R3 twice.",
       Y:format("Something stuck?") .. " Hold Back + Start for 1 second (kill switch), or touch mouse / keyboard.",
@@ -304,7 +313,7 @@ ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 local pending, delay = false, 0
 ev:SetScript("OnEvent", function(self, event, arg)
   if event == "ADDON_LOADED" and arg == "WowPad" then
-    -- Saved settings from before this window existed = someone updating.
+    -- Existing saved settings (bar layout or an earlier visit) = someone updating.
     existingUser = WowPadDB ~= nil and (WowPadDB.bar ~= nil or WowPadDB.firstTimeSeen ~= nil)
   elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" then
     if WowPadDB and WowPadDB.firstTimeSeen ~= Version() and not F:IsShown() then

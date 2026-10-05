@@ -27,7 +27,7 @@ It has two parts that work together:
 - the `WowPad` addon (bar, menus, options) goes in `Interface/AddOns`.
 
 Made and tested on Linux (CachyOS, Faugus Launcher / Proton) with an Xbox-style
-pad and the 2026 Steam Controller. Windows should work but is untested.
+pad and the 2026 Steam Controller. Windows has been tested as well.
 
 > Using a DLL with a game is your own call. Ask your server's staff before
 > using or sharing it.

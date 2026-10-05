@@ -1,11 +1,11 @@
+// inject.cpp - synthetic input via SendInput (default) or PostMessage.
+//
+// SendInput reaches the game under Proton, including relative motion during
+// mouselook. PostMessage mode ([Inject] Mode=PostMessage) is a fallback:
+// keys/clicks are posted to the game window and motion uses SetCursorPos.
 #include "inject.h"
 #include "gamewindow.h"
 #include "log.h"
-
-// WINE BEHAVIOUR TO VERIFY (Phase 2 TESTING): whether SendInput keys and
-// relative mouse motion reach wow.exe (and its DirectInput mouse during
-// mouselook) under Proton. PostMessage mode is the fallback: keys/clicks are
-// posted to the game window and motion uses SetCursorPos.
 
 static InjectMode g_mode = INJECT_SENDINPUT;
 static bool       g_keys[256];
@@ -111,12 +111,6 @@ void Inject_MouseWheel(int notches) {
         POINT p; GetCursorPos(&p);
         PostMessageW(h, WM_MOUSEWHEEL, MAKEWPARAM(0, (short)(notches * WHEEL_DELTA)), MAKELPARAM(p.x, p.y));
     }
-}
-
-bool Inject_AnythingHeld() {
-    if (g_btn[0] || g_btn[1]) return true;
-    for (bool k : g_keys) if (k) return true;
-    return false;
 }
 
 void Inject_ReleaseAll() {

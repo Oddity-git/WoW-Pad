@@ -1,5 +1,6 @@
 // worker.cpp - the background thread spawned from DllMain.
-// Polls the controller, logs changes, and drives the controller-mode mapper.
+// Polls the controller, logs changes ([Log] debug options), and drives the
+// controller-mode mapper.
 #include <windows.h>
 #include <math.h>
 #include "addonsettings.h"
@@ -20,6 +21,7 @@ static volatile LONG g_stop = 0;
 
 void Worker_RequestStop() { InterlockedExchange(&g_stop, 1); }
 
+// Debug aid ([Log] Buttons / Sticks): BTN, LS, RS, LT and RT lines.
 // Last LOGGED analog values (not last polled), so slow drifts still get logged
 // once they accumulate past the step.
 struct LoggedAnalog { float lx, ly, rx, ry, lt, rt; };

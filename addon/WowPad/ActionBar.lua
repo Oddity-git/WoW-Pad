@@ -1,11 +1,12 @@
--- ActionBar.lua - Phase 5: the controller action bar.
+-- ActionBar.lua - the controller action bar and the utility ring.
 --
--- One object (WowPadBar) holding four clusters drawn like the pad, WoW
+-- One frame (WowPadBar) holding four clusters drawn like the pad, WoW
 -- Forever style:
---     Default (no trigger)   top    : D-pad = 4 slots, face = fixed (jump/attack/back/menu)
+--     Default (no trigger)   top    : D-pad = 4 slots, face = fixed (jump/back/attack/menu)
 --     Left    (LT held)      left   : D-pad + face = 8 slots
 --     Right   (RT held)      right  : 8 slots
 --     Bottom  (LT+RT held)   bottom : 8 slots
+-- Lite mode shows a single cluster that switches to the held set.
 -- The slot buttons are the WowPadSlot<set>_<i> secure buttons the header binds
 -- the pad keys to, so what you see is exactly what the pad fires.
 --
@@ -20,7 +21,7 @@ WP.Bar = Bar
 -- Compact WoW Forever proportions: buttons nearly touching, the left/right
 -- sets sit half a row lower than the top set and half a row higher than the
 -- bottom set, so the four sets interleave in a flat band.
-local SIZE, STEP, HALF = 32, 26.5, 52.5  -- button size, spacing in a pad shape (~2px between rings), D-pad<->face offset
+local SIZE, STEP, HALF = 32, 26.5, 52.5  -- button size, spacing in a pad shape (~2px between rings), D-pad/face offset from the cluster centre
 local SIDE, VERT = 189, 50               -- left/right and top/bottom set offsets from the centre
 local LAYOUT_VERSION = 2                 -- bump when the shape changes (resets saved position/scale)
 local CLUSTERS = {                       -- set -> centre offset inside the bar
@@ -114,9 +115,11 @@ end
 ---------------------------------------------------------------------------
 -- Visual updates (safe in combat: only textures/text/cooldown frames)
 ---------------------------------------------------------------------------
+local RING_ICON = "Interface\\Icons\\INV_Jewelry_Ring_03"
 local function UpdateButton(btn)
   local d = btn.data
   local icon = SlotIcon(d)
+  if WP.RingSlotKey and btn.key == WP.RingSlotKey() then d, icon = nil, RING_ICON end   -- the ring's own button
   if icon ~= btn.iconPath then RoundIcon(btn.icon, icon); btn.iconPath = icon end
   Shown(btn.icon, icon ~= nil)
   Shown(btn.empty, icon == nil)
@@ -355,7 +358,7 @@ end
 ---------------------------------------------------------------------------
 -- Lite mode: one cluster; holding a trigger shows that set in its place.
 ---------------------------------------------------------------------------
-local badge, tabs = nil, {}
+local tabs = {}
 local LITE_NAMES = { [0] = "Default", [1] = "LT", [2] = "RT", [3] = "LT+RT" }
 
 local function UpdateTabs()
@@ -435,7 +438,7 @@ local function AddOutline(parent, set)
   o:SetSize(SIZE * 1.15, SIZE * 1.15)   -- hugs the ring
   o:SetPoint("CENTER")
   o:Hide()
-  table.insert(clusters[set].outlines, o)
+  if clusters[set] then table.insert(clusters[set].outlines, o) end
 end
 
 ---------------------------------------------------------------------------
@@ -472,7 +475,8 @@ function Bar.Press(btn)
 end
 
 -- The fixed A/B/X/Y of the default set aren't buttons that get clicked, so
--- watch what they trigger: jump, start attack, our back / target menu buttons.
+-- watch what they trigger: jump, start attack (or the no-op X when attacking
+-- is off), our back / target menu buttons.
 local function HookFixedPresses()
   local function F(i) return function() if WP.mode == "controller" and WP.set == 0 then Bar.Press(Bar.fixedFrames and Bar.fixedFrames[i]) end end end
   if not Bar.hookedJump then
@@ -510,12 +514,14 @@ local function MakeFixed(c, i)
   f:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-local function MakeSlot(c, set, i)
+local function MakeSlot(c, set, i, opts)
+  opts = opts or {}
   local name = ("WowPadSlot%d_%d"):format(set, i)
   -- ActionButtonTemplate is a CheckButton template (Blizzard's bars are CheckButtons too).
   local btn = CreateFrame("CheckButton", name, c, "SecureActionButtonTemplate, ActionButtonTemplate")
   btn:SetSize(SIZE, SIZE)
-  btn:SetPoint("CENTER", c, "CENTER", SLOT_POS[i][1], SLOT_POS[i][2])
+  local pos = opts.pos or SLOT_POS[i]
+  btn:SetPoint("CENTER", c, "CENTER", pos[1], pos[2])
   btn:RegisterForClicks("AnyDown")      -- key bindings click on press only (no double cast)
   btn:RegisterForDrag("LeftButton")
   btn.key = Key(set, i)
@@ -537,7 +543,9 @@ local function MakeSlot(c, set, i)
   btn.cooldown:SetPoint("BOTTOMRIGHT", -3, 3)
   local hotkey = _G[name .. "HotKey"]
   if hotkey then hotkey:SetText(""); hotkey:Hide() end
-  if DPAD_ARROW[i] then
+  if opts.noGlyph then
+    -- ring wedges: no button glyph
+  elseif DPAD_ARROW[i] then
     -- on its own child frame so it always draws above the ring and cooldown
     local gf = CreateFrame("Frame", nil, btn)
     gf:SetAllPoints()
@@ -581,7 +589,7 @@ table.insert(WP.setupHooks, function()
   bar:SetScript("OnDragStart", function(self) if Bar.editing then WP.SnapDragStart(self) end end)
   bar:SetScript("OnDragStop", function(self) WP.SnapDragStop(); SavePosition() end)
   bar:SetScript("OnMouseWheel", function(_, delta)
-    if Bar.editing then Bar.SetScale(((WowPadDB.bar and WowPadDB.bar.scale) or 1) + delta * 0.05) end
+    if Bar.editing then Bar.SetScale((Bar.Pos().scale or 1) + delta * 0.05) end   -- lite has its own size
   end)
   bar.editBg = bar:CreateTexture(nil, "BACKGROUND")
   bar.editBg:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
@@ -672,3 +680,75 @@ poll:SetScript("OnUpdate", function(_, elapsed)
   acc = 0
   for _, btn in pairs(slots) do Bar.UpdateUsable(btn) end
 end)
+
+---------------------------------------------------------------------------
+-- Utility ring: hold the button on its bar slot, point the right stick at a
+-- wedge (the DLL reports which), let go to use it. 8 wedges = bar slots of set
+-- 9 ("9_1".."9_8"), so dragging, icons, cooldowns and per-character saving
+-- work like any slot. The game's secure code shows the ring and fires the
+-- wedge (works in combat): see WP.SetupRingKey in Core.lua.
+---------------------------------------------------------------------------
+-- Same look as the Start menu wheel (WP.BuildWheelArt, Radial.lua).
+local RING_R, RING_WHEEL, RING_ICON_SCALE = 120, 400, 44 / 32
+local Ring = {}
+WP.Ring = Ring
+
+-- Which bar slot holds the ring button ("set_i"), from WowPadDB.wpRingSlot (set*10+i).
+function WP.RingSlotKey()
+  local v = WowPadDB and tonumber(WowPadDB.wpRingSlot) or 0
+  if v <= 0 then return nil end
+  return math.floor(v / 10) .. "_" .. (v % 10)
+end
+
+table.insert(WP.setupHooks, function()
+  local r = CreateFrame("Frame", "WowPadRing", UIParent, "SecureHandlerBaseTemplate")
+  r:SetSize(RING_WHEEL + 20, RING_WHEEL + 20)
+  r:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
+  r:SetFrameStrata("DIALOG")
+  r:Hide()
+  local hub
+  hub, Ring.Glow = WP.BuildWheelArt(r, RING_WHEEL)
+  hub:SetPoint("CENTER")
+  Ring.label = r:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  Ring.label:SetPoint("CENTER")
+  Ring.label:SetWidth(RING_R * 1.3)
+  Ring.help = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  Ring.help:SetPoint("TOP", r, "BOTTOM", 0, -4)
+  Ring.help:SetText("UTILITY RING - drag spells, items, macros or mounts onto the wedges; right-click clears")
+  Ring.help:Hide()
+  Ring.frame, Ring.wedges = r, {}
+  for d = 1, 8 do
+    local a = math.rad((d - 1) * 45)                 -- wedge 1 = up, clockwise
+    -- Icons as big as the main menu's: scaled, so the offset is divided back.
+    local k = RING_ICON_SCALE
+    MakeSlot(r, 9, d, { pos = { math.sin(a) * RING_R / k, math.cos(a) * RING_R / k }, noGlyph = true })
+    local w = slots["9_" .. d]
+    w:SetScale(k)
+    Ring.wedges[d] = w
+    SecureHandlerSetFrameRef(WP.header, "rw" .. d, w)
+  end
+  SecureHandlerSetFrameRef(WP.header, "ringframe", r)
+  if WP.SetupRingKey then WP.SetupRingKey() end
+  Bar.Load()
+end)
+
+-- Wedge highlight + name in the middle (the header reports the stick's wedge).
+function Ring.Highlight(d)
+  d = tonumber(d) or 0
+  if Ring.Glow then Ring.Glow(d > 0 and d or nil) end
+  local w = Ring.wedges and Ring.wedges[d]
+  local data = w and w.data
+  local name = data and (data.name or (data.id and GetItemInfo(data.id)))
+  if Ring.label then Ring.label:SetText(name or "") end
+end
+
+-- Edit mode shows the ring too (when one is set up), for filling its wedges.
+local origSetEditing = Bar.SetEditing
+function Bar.SetEditing(on)
+  origSetEditing(on)
+  if not Ring.frame or InCombatLockdown() then return end
+  local show = on and WP.RingSlotKey() ~= nil
+  if show then Ring.frame:Show() else Ring.frame:Hide() end
+  if show then Ring.help:Show() else Ring.help:Hide() end
+  Ring.Highlight(0)
+end

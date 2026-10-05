@@ -1,4 +1,5 @@
--- Core.lua - WowPad: signal bindings, set switching, mode, mouselook.
+-- Core.lua - signal bindings, action-set switching, controller/desktop mode,
+-- mouselook, open-window detection, events and the /wp slash command.
 --
 -- How it fits together:
 --  * The DLL presses signal keys (Signals.lua). Mode and pointer keys are bound
@@ -13,9 +14,6 @@
 --  * Menu context (window open, out of combat): the header points D-pad at
 --    Nav.lua, A/X/B at secure click buttons, LB/RB at window focus/pages.
 --    PLAYER_REGEN_DISABLED forces action context right before combat lockdown.
---
--- Phase 3 slots are placeholders that print which set/slot fired. Phase 5
--- replaces them with real spells.
 
 local WP = WowPad
 local KEY = WP.KEY
@@ -27,10 +25,12 @@ local function Print(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99WowPad|r: " .
 WP.Print = Print
 
 ---------------------------------------------------------------------------
--- What each slot does per set: { kind, target }. kind "B" = binding command,
--- "C" = click a button by name.
+-- What each slot does per set: returns kind, target. kind "B" = binding
+-- command, "C" = click a button by name.
 ---------------------------------------------------------------------------
 local function SlotAction(set, i)
+  -- The utility ring's button (Options > Bars), on any assignable slot.
+  if WowPadDB and tonumber(WowPadDB.wpRingSlot) == set * 10 + i then return "C", "WowPadRingKey" end
   if set == 0 then
     if i == 5 then return "B", "JUMP" end            -- A
     if i == 6 then return "C", "WowPadBackButton" end -- B (no window open): clear target
@@ -60,18 +60,25 @@ local STATIC = {
   { "START",       "C", "WowPadStart" },
   { "BACK_TAP",    "B", "TOGGLEWORLDMAP" },
   { "BACK_HOLD",   "B", "OPENALLBAGS" },
+  -- Bumper held + right stick flick: the friendly bumper cycles your party
+  -- (RefreshInteract points these at the party buttons, following the LB/RB swap).
+  { "LB_FLICK_DOWN", "C", "WowPadNoop" },
+  { "LB_FLICK_UP",   "C", "WowPadNoop" },
+  { "RB_FLICK_DOWN", "C", "WowPadNoop" },
+  { "RB_FLICK_UP",   "C", "WowPadNoop" },
+  -- Utility ring held: which wedge the right stick points at (header attribute "ringdir").
+  { "RING_DIR_0",    "C", "WowPadRingDir0" },
+  { "RING_DIR_1",    "C", "WowPadRingDir1" },
+  { "RING_DIR_2",    "C", "WowPadRingDir2" },
+  { "RING_DIR_3",    "C", "WowPadRingDir3" },
+  { "RING_DIR_4",    "C", "WowPadRingDir4" },
+  { "RING_DIR_5",    "C", "WowPadRingDir5" },
+  { "RING_DIR_6",    "C", "WowPadRingDir6" },
+  { "RING_DIR_7",    "C", "WowPadRingDir7" },
+  { "RING_DIR_8",    "C", "WowPadRingDir8" },
 }
 
----------------------------------------------------------------------------
--- Debug output for placeholders
----------------------------------------------------------------------------
-function WowPad_Slot(set, i)
-  if WowPadDB and WowPadDB.debug then
-    Print(("Slot fired: |cffffff00%s|r set, %s%s"):format(WP.SET_NAMES[set] or set, WP.SLOT_LABELS[i] or i,
-          InCombatLockdown() and " |cffff5555(combat)|r" or ""))
-  end
-end
-
+-- A plain (insecure) named button that runs fn on key down.
 local function InsecureButton(name, fn)
   local b = CreateFrame("Button", name, UIParent)
   b:RegisterForClicks("AnyDown")
@@ -94,6 +101,24 @@ local function SetupSecure()
   back:SetAttribute("type", "macro")
   back:SetAttribute("macrotext", "/cleartarget")
 
+  -- Healer mode (hold the ally bumper, flick the right stick): secure
+  -- target buttons. The wrapped snippet runs in the game's secure code (works
+  -- in combat): it steps you -> party1..4, skipping empty slots, and points the
+  -- button at that unit just before it targets.
+  local function PartyButton(name, step)
+    local b = CreateFrame("Button", name, UIParent, "SecureActionButtonTemplate")
+    b:RegisterForClicks("AnyDown")
+    b:SetAttribute("type", "target")
+    b:SetAttribute("unit", "player")
+    b:SetAttribute("step", step)
+    return b
+  end
+  WP.partyNext = PartyButton("WowPadPartyNext", 1)
+  WP.partyPrev = PartyButton("WowPadPartyPrev", -1)
+  -- Healer mode: tapping the ally bumper targets the member you last cycled
+  -- to (you at first), instead of the nearest friendly.
+  WP.partyCur = PartyButton("WowPadPartyCurrent", 0)
+
   -- Header: rebinds on mode / trigger changes.
   header = CreateFrame("Frame", "WowPadHeader", UIParent, "SecureHandlerAttributeTemplate")
   header:SetAttribute("mode", "desktop")
@@ -102,7 +127,7 @@ local function SetupSecure()
   header:SetAttribute("ctx", "action")
   -- Default set with a window open (out of combat): D-pad navigates,
   -- A = click, B = back/close, X = right-click, Y = preview (tap) / compare (hold),
-  -- L3 = destroy the selected bag item (asks first).
+  -- L3 = item actions for the selected bag item.
   -- LB/RB = window focus / page.
   -- Interact is muted so X in a menu doesn't also interact with the world.
   for i, target in ipairs({ "WowPadNavUp", "WowPadNavDown", "WowPadNavLeft", "WowPadNavRight",
@@ -182,7 +207,7 @@ local function SetupSecure()
       self:SetBindingClick(true, self:GetAttribute("klb"), "WowPadNavPrev")
       self:SetBindingClick(true, self:GetAttribute("krb"), "WowPadNavNext")
       self:SetBindingClick(true, self:GetAttribute("kint"), "WowPadNoop")
-      self:SetBindingClick(true, self:GetAttribute("kl3"), "WowPadNavDestroy") -- L3 = destroy bag item
+      self:SetBindingClick(true, self:GetAttribute("kl3"), "WowPadNavDestroy") -- L3 = bag item actions
     end
     self:SetAttribute("set", set)
   ]=])
@@ -195,12 +220,29 @@ local function SetupSecure()
     b:SetAttribute("_onclick", ('self:GetFrameRef("h"):SetAttribute("%s", %s)'):format(attr, valueLua))
     return b
   end
+  for _, b in ipairs({ WP.partyNext, WP.partyPrev, WP.partyCur }) do
+    SecureHandlerWrapScript(b, "OnClick", header, [=[
+      local step = self:GetAttribute("step")
+      local i = owner:GetAttribute("pidx") or 0
+      if step == 0 then
+        if i ~= 0 and not UnitExists("party" .. i) then i = 0 end   -- they left: back to you
+      else
+        for n = 1, 5 do
+          i = (i + step) % 5
+          if i == 0 or UnitExists("party" .. i) then break end
+        end
+      end
+      owner:SetAttribute("pidx", i)
+      if i == 0 then self:SetAttribute("unit", "player") else self:SetAttribute("unit", "party" .. i) end
+    ]=])
+  end
   StateButton("WowPadTrigLOn", "lt", "1")
   StateButton("WowPadTrigLOff", "lt", "0")
   StateButton("WowPadTrigROn", "rt", "1")
   StateButton("WowPadTrigROff", "rt", "0")
   local modeC = StateButton("WowPadModeCtrl", "mode", '"controller"')
   local modeD = StateButton("WowPadModeDesk", "mode", '"desktop"')
+  for n = 0, 8 do StateButton("WowPadRingDir" .. n, "ringdir", tostring(n)) end
 
   -- Mode and pointer signals are always bound.
   SetOverrideBindingClick(modeC, true, KEY.MODE_CONTROLLER, "WowPadModeCtrl")
@@ -220,6 +262,9 @@ local function SetupSecure()
       if WP.Bar then WP.Bar.HighlightSet(value) end
     elseif name == "ctx" then
       WP.ctx = value
+    elseif name == "ringdir" then
+      if WP.Ring and WP.Ring.Highlight then WP.Ring.Highlight(value) end
+      return
     end
     WP.UpdateStatus()
   end)
@@ -229,7 +274,7 @@ local function SetupSecure()
 end
 
 ---------------------------------------------------------------------------
--- Insecure buttons: pointer mode, placeholders, navigation stubs
+-- Insecure buttons: pointer mode, no-op, interact fallback, zoom hint
 ---------------------------------------------------------------------------
 InsecureButton("WowPadPointerOn",  function() WP.pointer = true;  WP.UpdateStatus() end)
 InsecureButton("WowPadPointerOff", function() WP.pointer = false; WP.UpdateStatus() end)
@@ -271,7 +316,8 @@ InsecureButton("WowPadZoomOff", function() zoomHint:Hide() end)
 
 ---------------------------------------------------------------------------
 -- Interact: follow whatever is bound to your interact key (default F).
--- Also applies the X-attack setting. Secure attributes: out of combat only.
+-- Also applies the X-attack setting, the LB/RB swap and healer mode.
+-- Secure attributes: out of combat only.
 ---------------------------------------------------------------------------
 function WP.RefreshInteract() -- re-run after combat via PLAYER_REGEN_ENABLED
   if not header or InCombatLockdown() then return end
@@ -285,14 +331,35 @@ function WP.RefreshInteract() -- re-run after combat via PLAYER_REGEN_ENABLED
   local swap = WowPadDB.swapBumpers == true
   local lbT = swap and "TARGETNEARESTENEMY" or "TARGETNEARESTFRIEND"
   local rbT = swap and "TARGETNEARESTFRIEND" or "TARGETNEARESTENEMY"
+  local lbK, rbK = "B", "B"
+  -- Healer mode: the ally bumper targets your last-cycled party member.
+  local healer = WowPadDB.wpBumperFlick == true   -- off by default
+  if healer then
+    if swap then rbK, rbT = "C", "WowPadPartyCurrent" else lbK, lbT = "C", "WowPadPartyCurrent" end
+  end
   local lbIdx, rbIdx
+  local flick = {}
   for i, st in ipairs(STATIC) do
     if st[1] == "LB" then lbIdx = i elseif st[1] == "RB" then rbIdx = i end
+    if st[1]:find("_FLICK_") then flick[st[1]] = i end
+  end
+  -- Healer mode on the ally bumper (LB, or RB when swapped); the other
+  -- bumper's flicks do nothing.
+  local fr = swap and "RB" or "LB"
+  local flickT = {}
+  for sig in pairs(flick) do
+    local b = sig:sub(1, 2)
+    if b == fr then flickT[sig] = sig:find("DOWN") and "WowPadPartyNext" or "WowPadPartyPrev"
+    else flickT[sig] = "WowPadNoop" end
   end
   WP.interactCmd = cmd
   local changed = header:GetAttribute("sy" .. idx) ~= kind or header:GetAttribute("st" .. idx) ~= target
                   or header:GetAttribute("y0_7") ~= xKind or header:GetAttribute("t0_7") ~= xTarget
                   or header:GetAttribute("st" .. lbIdx) ~= lbT or header:GetAttribute("st" .. rbIdx) ~= rbT
+                  or header:GetAttribute("sy" .. lbIdx) ~= lbK or header:GetAttribute("sy" .. rbIdx) ~= rbK
+  for sig, i in pairs(flick) do
+    if header:GetAttribute("st" .. i) ~= flickT[sig] then changed = true end
+  end
   if not changed then return end
   header:SetAttribute("sy" .. idx, kind)
   header:SetAttribute("st" .. idx, target)
@@ -300,11 +367,14 @@ function WP.RefreshInteract() -- re-run after combat via PLAYER_REGEN_ENABLED
   header:SetAttribute("t0_7", xTarget)
   header:SetAttribute("st" .. lbIdx, lbT)
   header:SetAttribute("st" .. rbIdx, rbT)
+  header:SetAttribute("sy" .. lbIdx, lbK)
+  header:SetAttribute("sy" .. rbIdx, rbK)
+  for sig, i in pairs(flick) do header:SetAttribute("st" .. i, flickT[sig]) end
   header:SetAttribute("refresh", (header:GetAttribute("refresh") or 0) + 1) -- rebind now
 end
 
 ---------------------------------------------------------------------------
--- Mouselook: on in controller mode unless something needs the pointer
+-- Open-window detection (drives mouselook and the menu context)
 ---------------------------------------------------------------------------
 -- Other addons put odd things in UISpecialFrames (Questie: an AceGUI widget
 -- table, whose real frame is .frame). Returns a real frame or nil.
@@ -332,7 +402,9 @@ end
 -- Other addons' windows that don't register with the game's panel system
 -- (so GetUIPanel/UISpecialFrames don't list them) but should count as open
 -- windows. DialogUI: DGossipFrame (its quest frame is a normal UI panel).
-WP.EXTRA_WINDOWS = { "DGossipFrame", "DQuestFrame" }
+-- Also the Esc menu and its option windows, which aren't always listed either.
+WP.EXTRA_WINDOWS = { "DGossipFrame", "DQuestFrame", "GameMenuFrame", "VideoOptionsFrame",
+                     "AudioOptionsFrame", "InterfaceOptionsFrame", "KeyBindingFrame" }
 
 -- A window some addon keeps "open" but out of sight (New Era cloaks Blizzard's
 -- profession window: alpha 0, moved off-screen, still shown). It isn't a
@@ -386,6 +458,41 @@ local function AnyWindowOpen()
 end
 WP.AnyWindowOpen = AnyWindowOpen
 
+---------------------------------------------------------------------------
+-- Utility ring key: bound to the ring's bar slot. Key down shows the ring;
+-- key up copies the chosen wedge's action onto itself and fires it. All in
+-- the game's secure code, so it works in combat. Centre = cancel.
+---------------------------------------------------------------------------
+function WP.SetupRingKey()
+  if _G.WowPadRingKey or InCombatLockdown() then return end
+  local k = CreateFrame("Button", "WowPadRingKey", UIParent, "SecureActionButtonTemplate")
+  k:RegisterForClicks("AnyDown", "AnyUp")
+  SecureHandlerWrapScript(k, "OnClick", header, [=[
+    local ring = owner:GetFrameRef("ringframe")
+    if down then
+      owner:SetAttribute("ringdir", 0)
+      if ring then ring:Show() end
+      return false
+    end
+    if ring then ring:Hide() end
+    local d = owner:GetAttribute("ringdir") or 0
+    owner:SetAttribute("ringdir", 0)
+    if d == 0 then return false end
+    local w = owner:GetFrameRef("rw" .. d)
+    if not w then return false end
+    self:SetAttribute("type", w:GetAttribute("type"))
+    self:SetAttribute("spell", w:GetAttribute("spell"))
+    self:SetAttribute("item", w:GetAttribute("item"))
+    self:SetAttribute("macro", w:GetAttribute("macro"))
+    self:SetAttribute("macrotext", w:GetAttribute("macrotext"))
+    if not self:GetAttribute("type") then return false end
+  ]=])
+end
+
+---------------------------------------------------------------------------
+-- Mouselook: on in controller mode unless something needs the pointer.
+-- Also crosshair peek and the ground-targeting hint.
+---------------------------------------------------------------------------
 local weStarted, mlElapsed = false, 0
 
 -- Crosshair peek: WoW ignores what's under the pointer during camera look, so
@@ -399,16 +506,81 @@ end
 -- While peeking the cursor is an invisible image, so WoW's hand/sword icons
 -- don't show on the crosshair (tooltips and mouseover still work).
 local BLANK_CURSOR = "Interface\\AddOns\\WowPad\\Textures\\blank"
+-- Ground-targeted spells (Blizzard, Flare, ...): while one waits for its
+-- location, WowPad leaves the game's own cursor alone (the DLL recognises it)
+-- and shows a hint; A or the same button places the spell, B cancels. With a
+-- window open the addon blanks the cursor instead, so the DLL leaves A alone.
+WP.groundTargeting = false
+local function PeekCursor() return BLANK_CURSOR end
+WP.PeekCursor = PeekCursor
 function WP.EndPeek()
   if not WP.peeking then return end
   WP.peeking = false
-  ResetCursor()
+  -- While aiming, leave the game's cast cursor alone (a reset would flash the
+  -- normal pointer, which tells the DLL aiming is over).
+  if not (SpellIsTargeting and SpellIsTargeting()) then ResetCursor() end
+end
+-- Hint under the crosshair while a ground spell waits.
+local gtHint = CreateFrame("Frame", "WowPadGroundHint", UIParent)
+gtHint:SetSize(10, 10)
+gtHint:SetPoint("CENTER", 0, -90)
+-- Sits just above the cast bar (wherever your UI put it); if the bar is hidden
+-- away by another addon, under the crosshair instead.
+local function PlaceHint()
+  gtHint:ClearAllPoints()
+  local bar = CastingBarFrame
+  -- (Not WP.Cloaked: the cast bar fades itself to alpha 0 after every cast.)
+  local l, b = bar and bar.GetLeft and bar:GetLeft(), bar and bar.GetBottom and bar:GetBottom()
+  local onScreen = l and b and l * bar:GetEffectiveScale() < UIParent:GetWidth() * UIParent:GetEffectiveScale()
+                   and b * bar:GetEffectiveScale() < UIParent:GetHeight() * UIParent:GetEffectiveScale()
+                   and bar:GetRight() > 0 and bar:GetTop() > 0
+  if onScreen then
+    gtHint:SetPoint("BOTTOM", bar, "TOP", 0, 12)
+  else
+    gtHint:SetPoint("CENTER", 0, -90)
+  end
+end
+gtHint:SetFrameStrata("HIGH")
+gtHint:Hide()
+local gtText = gtHint:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+gtText:SetPoint("CENTER")
+gtText:SetText("|cffffd100A|r or same button: Place     |cffffd100B|r Cancel")
+-- Called from the mouselook update loop below (every 0.05 s).
+local reblank
+function WP.GroundTargetTick()
+  -- Only in the world (no window open, no pointer mode): in menus the buttons navigate.
+  local aiming = SpellIsTargeting and SpellIsTargeting()
+  local t = aiming and CameraWanted() and true or false
+  -- Aiming with a window open (an enchant scroll from the bags): keep setting
+  -- the blank cursor; the DLL reads that as "menu: A still navigates".
+  if aiming and not t and WP.mode == "controller" and not WP.pointer then SetCursor(BLANK_CURSOR) end
+  if t then
+    WP.groundTargeting = true
+    if not gtHint:IsShown() then PlaceHint(); gtHint:Show() end
+  elseif WP.groundTargeting then
+    WP.groundTargeting = false
+    gtHint:Hide()
+  end
+  -- Aiming just ended: show the normal pointer first (that's how the DLL
+  -- learns it's over), then blank it again on the next update if peeking.
+  if aiming then
+    reblank = 1
+  elseif reblank == 1 then
+    ResetCursor()
+    reblank = 2
+  elseif reblank == 2 then
+    reblank = nil
+    if WP.peeking then SetCursor(BLANK_CURSOR) end
+  end
 end
 InsecureButton("WowPadCamIdle", function()
-  if WowPadDB.peek ~= false and CameraWanted() and IsMouselooking() then
+  -- Ground targeting always pauses camera look at rest (even with peek off),
+  -- so the game's aiming cursor reaches the DLL; it isn't blanked then.
+  local peek = WowPadDB.peek ~= false or (SpellIsTargeting and SpellIsTargeting())
+  if peek and CameraWanted() and IsMouselooking() then
     WP.peeking = true
     MouselookStop()
-    SetCursor(BLANK_CURSOR)
+    if not (SpellIsTargeting and SpellIsTargeting()) then SetCursor(BLANK_CURSOR) end
   end
 end)
 InsecureButton("WowPadCamActive", function()
@@ -424,6 +596,7 @@ mlFrame:SetScript("OnUpdate", function(_, elapsed)
   if mlElapsed < 0.05 then return end
   mlElapsed = 0
   if WP.peeking and not CameraWanted() then WP.EndPeek() end
+  WP.GroundTargetTick()
   local want = CameraWanted() and not WP.peeking
   local looking = IsMouselooking()
   if want and not looking then
@@ -445,7 +618,8 @@ mlFrame:SetScript("OnUpdate", function(_, elapsed)
 end)
 
 ---------------------------------------------------------------------------
--- Status display (Phase 3 testing aid; /wp status to hide)
+-- Status line (debug / troubleshooting aid; off by default, /wp status
+-- toggles). Shows mode, action set, camera/pointer context.
 ---------------------------------------------------------------------------
 local status = CreateFrame("Frame", "WowPadStatus", UIParent)
 status:SetSize(420, 22)
@@ -482,7 +656,8 @@ ev:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 ev:SetScript("OnEvent", function(_, event, addon, func)
   if event == "PLAYER_LOGIN" then
     WowPadDB = WowPadDB or {}
-    -- Settings version 2: testing-era chat output and status line off by default.
+    -- Settings version 2: debug chat output and the status line are off by
+    -- default; settings saved before version 2 get them switched off once.
     if (WowPadDB.version or 1) < 2 then
       WowPadDB.debug, WowPadDB.showStatus, WowPadDB.version = false, false, 2
     end
@@ -502,6 +677,7 @@ ev:SetScript("OnEvent", function(_, event, addon, func)
   elseif event == "UPDATE_BINDINGS" then
     if WowPadDB then WP.RefreshInteract() end
   elseif addon == "WowPad" then
+    -- ADDON_ACTION_BLOCKED / FORBIDDEN for WowPad: report it (troubleshooting).
     Print(("|cffff5555%s|r: %s%s"):format(event, tostring(func), InCombatLockdown() and " (combat)" or ""))
   end
 end)
@@ -510,7 +686,7 @@ SLASH_WOWPAD1 = "/wp"
 SlashCmdList.WOWPAD = function(msg)
   local rest = msg
   msg = (msg or ""):lower():match("^%s*(%S*)")
-  if msg == "debug" then
+  if msg == "debug" then              -- debug aid: extra chat output
     WowPadDB.debug = not WowPadDB.debug
     Print("Debug messages " .. (WowPadDB.debug and "on" or "off"))
   elseif msg == "xattack" then
@@ -531,7 +707,7 @@ SlashCmdList.WOWPAD = function(msg)
   elseif msg == "peek" then
     WowPadDB.peek = (WowPadDB.peek == false)
     Print("Crosshair peek (tooltips when the right stick rests): " .. (WowPadDB.peek and "on" or "off"))
-  elseif msg == "mlprobe" then
+  elseif msg == "mlprobe" then        -- debug aid: mouselook / mouseover probe
     if WP.MouselookProbe then WP.MouselookProbe() end
   elseif msg == "blizz" then
     if WP.ToggleBlizzBars then WP.ToggleBlizzBars() end
@@ -540,7 +716,7 @@ SlashCmdList.WOWPAD = function(msg)
   elseif msg == "scale" then
     local v = tonumber(select(2, (rest or ""):match("^%s*(%S*)%s*(%S*)")))
     if v and WP.Bar then WP.Bar.SetScale(v) else Print("Usage: /wp scale 0.8") end
-  elseif msg == "navinfo" then
+  elseif msg == "navinfo" then        -- debug aid: menu selection details
     if WP.Nav and WP.Nav.Info then WP.Nav.Info() end
   elseif msg == "firsttime" or msg == "setup" or msg == "welcome" then
     if WP.ShowFirstTime then WP.ShowFirstTime(1) end
@@ -549,7 +725,7 @@ SlashCmdList.WOWPAD = function(msg)
   elseif msg == "sens" then
     local v = tonumber(select(2, (rest or ""):match("^%s*(%S*)%s*(%S*)")))
     if v and WP.SetCamSens then WP.SetCamSens(v) else Print("Usage: /wp sens 0.5  (camera, 0.05-2, then /reload)") end
-  elseif msg == "status" then
+  elseif msg == "status" then         -- debug aid: status line on / off
     WowPadDB.showStatus = not WowPadDB.showStatus
     WP.UpdateStatus()
   else

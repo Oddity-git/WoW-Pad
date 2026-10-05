@@ -1,10 +1,12 @@
--- Options.lua - Esc > Interface > AddOns > WowPad (or /wp options).
+-- Options.lua - the options pages: Esc > Interface > AddOns > WowPad (or
+-- /wp options), with a Bars sub-page.
 --
 -- Two kinds of setting:
---  * addon settings (bar, crosshair, messages): apply immediately;
---  * DLL settings (stick speeds, invert, peek delay): the addon can't talk to
---    the DLL directly, so they are saved in WowPadDB (wp* keys) and the DLL
---    reads them from SavedVariables\WowPad.lua, which WoW writes on /reload.
+--  * addon settings (bars, crosshair, buttons, messages): apply immediately;
+--  * DLL settings (marked *: stick speeds, invert, peek delay, healer mode,
+--    walk/run, smooth camera, utility ring): the addon can't talk to the DLL
+--    directly, so they are saved in WowPadDB (wp* keys) and the DLL reads them
+--    from SavedVariables\WowPad.lua, which WoW writes on /reload.
 --    "Apply" does the /reload.
 
 local WP = WowPad
@@ -19,7 +21,7 @@ barsPanel.parent = "WowPad"
 barsPanel:Hide()
 local target = panel   -- page the helpers below add controls to
 
-local DLL_KEYS = { wpCamSens = 1, wpPtrSens = 1, wpZoomSens = 1, wpInvertY = false, wpPeekDelay = 250, wpWalkRun = false, wpCamSmooth = false }
+local DLL_KEYS = { wpCamSens = 1, wpPtrSens = 1, wpZoomSens = 1, wpInvertY = false, wpPeekDelay = 250, wpWalkRun = false, wpCamSmooth = false, wpBumperFlick = false, wpRingSlot = 0 }
 local saved = {}   -- DLL values as of the last reload
 
 local function DllValue(k)
@@ -49,7 +51,7 @@ end
 
 local controls = {}
 
--- Slider: opts = { min, max, step, fmt(v), get(), set(v) }
+-- Slider: o = { min, max, step, fmt(v), get(), set(v) }
 local function Slider(name, label, tip, x, y, o)
   local s = CreateFrame("Slider", name, target, "OptionsSliderTemplate")
   s:SetPoint("TOPLEFT", x, y)
@@ -105,7 +107,7 @@ local function Build()
   sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
   sub:SetText("Stick speeds: 100% = wowpad.ini.   |cffffd100*|r = needs Apply (reloads the UI).")
 
-  -- Left column: the sticks (DLL, needs Apply)
+  -- Left column: sticks (DLL, needs Apply) and crosshair
   local L, R = 20, 220   -- the panel is only ~415 wide
   Header("Sticks", L - 4, -56)
   Slider("WowPadOptCam", "Camera sensitivity*",
@@ -148,7 +150,7 @@ local function Build()
   pendingText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   pendingText:SetPoint("RIGHT", applyBtn, "LEFT", -8, 0)
 
-  -- Right column: addon settings (immediate)
+  -- Right column: buttons, messages, experimental (* = DLL, needs Apply)
   Header("Buttons", R - 4, -56)
   Check("WowPadOptXAttack", "X also starts auto attack",
     "X interacts (your " .. (WowPadDB.interactKey or "F") .. " binding) and starts attacking a hostile target.",
@@ -163,27 +165,41 @@ local function Build()
       WP.RefreshInteract()
     end)
 
-  Header("Messages", R - 4, -132)
+  Check("WowPadOptKeyboard", "On-screen keyboard (Back + A)",
+    "Back + A opens WowPad's keyboard above the chat window. Off: Back + A opens the normal chat box, "
+    .. "and the keyboard is never loaded.",
+    R - 4, -122, function() return WowPadDB.keyboard ~= false end,
+    function(v)
+      WowPadDB.keyboard = v
+      if not v and WP.Keyboard and WP.Keyboard:IsShown() then WP.Keyboard:Hide() end
+    end)
+  Check("WowPadOptBumperFlick", "Healer mode*",
+    "Tapping your ally-target bumper (LB, or RB if swapped) targets the party member you last picked (you at first). "
+    .. "Hold it and flick the right stick down / up for the next / previous member (you, then party 1-4); a gold frame "
+    .. "marks them on your unit frames. Works in combat. While the bumper is held, the right stick's up/down is used "
+    .. "for this (left/right still turns the camera). Off: the bumper targets the nearest friendly.",
+    R - 4, -146, DllGet("wpBumperFlick"), DllSet("wpBumperFlick"))
+  Header("Messages", R - 4, -180)
   Check("WowPadOptStatus", "Show the status line", "Mode, set and context above the bar.",
-    R - 4, -150, function() return WowPadDB.showStatus == true end,
+    R - 4, -198, function() return WowPadDB.showStatus == true end,
     function(v) WowPadDB.showStatus = v; WP.UpdateStatus() end)
   Check("WowPadOptDebug", "Debug messages in chat", nil,
-    R - 4, -174, function() return WowPadDB.debug == true end,
+    R - 4, -222, function() return WowPadDB.debug == true end,
     function(v) WowPadDB.debug = v end)
 
-  Header("|cffff9900Experimental|r", R - 4, -208)
+  Header("|cffff9900Experimental|r", R - 4, -256)
   Check("WowPadOptWalk", "Walk/run by stick tilt*",
     "Slight tilt walks, full tilt runs, using the game's Run/Walk toggle. Stopping always returns to running. If you press the "
     .. "keyboard Run/Walk key yourself, slight and full tilt swap; press that key again to fix it.",
-    R - 4, -226, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
+    R - 4, -274, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
   Check("WowPadOptSmooth", "Smooth camera*",
     "Smooths right-stick camera turning, so it glides instead of stepping. Adds a little delay "
     .. "(about 60 ms, [Camera] SmoothMs in wowpad.ini). Camera only, not the pointer.",
-    R - 4, -250, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
+    R - 4, -298, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
 
   local ft = CreateFrame("Button", "WowPadOptFirstTime", panel, "UIPanelButtonTemplate")
   ft:SetSize(170, 22)
-  ft:SetPoint("TOPLEFT", R - 4, -286)
+  ft:SetPoint("TOPLEFT", R - 4, -334)
   ft:SetText("First-time setup")
   ft:SetScript("OnClick", function()
     if InterfaceOptionsFrame then InterfaceOptionsFrame:Hide() end
@@ -238,6 +254,60 @@ local function Build()
       end
     end)
 
+  -- Utility ring: which bar slot opens it (the DLL needs it too: Apply).
+  Header("Utility ring", R - 4, -116)
+  local SETS = { [0] = "Default", "LT", "RT", "LT+RT" }
+  local function SlotName(v)
+    if not v or v <= 0 then return "None" end
+    local set, i = math.floor(v / 10), v % 10
+    return SETS[set] .. ": " .. WP.SLOT_LABELS[i]
+  end
+  local dd = CreateFrame("Frame", "WowPadOptRing", barsPanel, "UIDropDownMenuTemplate")
+  dd:SetPoint("TOPLEFT", R - 20, -134)
+  UIDropDownMenu_SetWidth(dd, 150)
+  local function Pick(_, v)
+    WowPadDB.wpRingSlot = v
+    UIDropDownMenu_SetText(dd, SlotName(v))
+    CloseDropDownMenus()
+    Refresh()   -- main page: "Changes marked * need Apply" + its Apply button
+  end
+  UIDropDownMenu_Initialize(dd, function(_, level)
+    local info = UIDropDownMenu_CreateInfo()
+    if (level or 1) == 1 then
+      info.text, info.arg1, info.func = "None", 0, Pick
+      info.checked = (tonumber(WowPadDB.wpRingSlot) or 0) == 0
+      UIDropDownMenu_AddButton(info, 1)
+      for set = 0, 3 do
+        info = UIDropDownMenu_CreateInfo()
+        info.text, info.hasArrow, info.notCheckable, info.value = SETS[set] .. " set", true, true, set
+        UIDropDownMenu_AddButton(info, 1)
+      end
+    else
+      local set = tonumber(UIDROPDOWNMENU_MENU_VALUE)
+      if not set then return end
+      for i = 1, (set == 0 and 4 or 8) do       -- default set: A/B/X/Y are fixed
+        info = UIDropDownMenu_CreateInfo()
+        info.text, info.arg1, info.func = WP.SLOT_LABELS[i], set * 10 + i, Pick
+        info.checked = tonumber(WowPadDB.wpRingSlot) == set * 10 + i
+        UIDropDownMenu_AddButton(info, level)
+      end
+    end
+  end)
+  UIDropDownMenu_SetText(dd, SlotName(tonumber(WowPadDB.wpRingSlot)))
+  local rn = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+  rn:SetPoint("TOPLEFT", R, -166)
+  rn:SetWidth(180)
+  rn:SetJustifyH("LEFT")
+  rn:SetText("Hold that button, point the right stick, let go to use. Fill the wedges in Edit bar layout. Needs Apply.")
+  local ap = CreateFrame("Button", "WowPadOptRingApply", barsPanel, "UIPanelButtonTemplate")
+  ap:SetSize(80, 22)
+  ap:SetPoint("TOPLEFT", R, -204)
+  ap:SetText("Apply")
+  ap:SetScript("OnClick", function()
+    if InCombatLockdown() then WP.Print("Leave combat first."); return end
+    ReloadUI()
+  end)
+
   Header("Extra bars", L - 4, -206)
   Check("WowPadOptXP", "XP bar", "WowPad's own XP bar. Turn off to use another addon's.",
     L - 4, -224, function() return WowPadDB.showXP ~= false end,
@@ -266,7 +336,6 @@ local function Build()
       if WP.UpdateMinimapButton then WP.UpdateMinimapButton() end
     end)
   target = panel
-
 end
 
 local function OnShowPage()

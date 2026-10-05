@@ -1,3 +1,4 @@
+// hooks.cpp - LL keyboard/mouse hooks that notice real (non-WowPad) input.
 #include <windows.h>
 #include <stdlib.h>
 #include "hooks.h"
@@ -59,7 +60,7 @@ DWORD WINAPI HookThread(LPVOID) {
     }
     return 0;
 }
-}
+} // namespace
 
 void Hooks_Start() {
     HANDLE t = CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);

@@ -1,8 +1,8 @@
 -- UnitMenu.lua - Y: a target menu like right-clicking a unit frame.
 --
 -- Blizzard's own unit menu can't do protected things (Set Focus) when an
--- addon opens it (verified in the Phase 3 probe), so this is our own list of
--- secure buttons. Out of combat only for now.
+-- addon opens it, so this is our own list of secure buttons. Out of combat
+-- only.
 
 local WP = WowPad
 local MAX_ITEMS = 12
@@ -24,7 +24,7 @@ WP.UnitMenu = M
 local title = M:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 title:SetPoint("TOP", 0, -10)
 
--- label, condition(unit) -> bool, attributes
+-- { label, shown-when(unit) -> bool, secure button attributes }
 local function isOtherPlayer(u) return UnitIsPlayer(u) and not UnitIsUnit(u, "player") end
 local function isFriendlyPlayer(u) return isOtherPlayer(u) and UnitIsFriend("player", u) end
 local ITEMS = {

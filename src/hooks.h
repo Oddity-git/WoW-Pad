@@ -1,8 +1,8 @@
 // hooks.h - low-level keyboard/mouse hooks for desktop-mode detection.
 // Runs on its own thread with a message loop (LL hooks require one).
 // Only records THAT real input happened; never which keys.
-// Verified in the Phase 3a probe: real input has no injected flag, ours
-// carries WOWPAD_INPUT_TAG, nothing else injects.
+// Verified in testing: real input has no injected flag, ours carries
+// WOWPAD_INPUT_TAG, nothing else injects.
 #pragma once
 
 void Hooks_Start();

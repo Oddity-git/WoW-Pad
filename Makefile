@@ -4,7 +4,7 @@ ifeq ($(origin CXX),default)
 CXX      := i686-w64-mingw32-g++
 endif
 OBJDUMP  ?= i686-w64-mingw32-objdump
-VERSION ?= 1.3.1
+VERSION ?= 1.4.0
 
 BUILD    := build
 SRCS     := $(wildcard src/*.cpp)
@@ -16,7 +16,7 @@ CXXFLAGS := -O2 -std=c++17 -Wall -Wextra -Wno-cast-function-type \
             -DWOWPAD_VERSION=\"$(VERSION)\"
 LDFLAGS  := -shared -static -static-libgcc -static-libstdc++ \
             -Wl,--enable-stdcall-fixup -s
-LIBS     := -lkernel32 -luser32
+LIBS     := -lkernel32 -luser32 -lgdi32
 
 .PHONY: all clean exports
 all: $(BUILD)/version.dll

@@ -27,5 +27,5 @@ else
     echo
     echo "WARNING: no static VERSION.dll import. It may still be loaded later by another"
     echo "DLL (check for the 'loaded into' line in wowpad.log). If wowpad.log never"
-    echo "appears, send me the DLL list above and we will pick a different proxy target."
+    echo "appears, the DLL list above shows which other DLL could be proxied instead."
 fi

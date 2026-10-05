@@ -1,3 +1,4 @@
+// controller_filter.cpp - stick and trigger deadzones (backend-independent).
 #include "controller.h"
 #include <math.h>
 

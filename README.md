@@ -1,4 +1,4 @@
-# <h1 align="center">WowPad 1.3.1</h1>
+# <h1 align="center">WowPad 1.4.0</h1>
 
 
 
@@ -28,7 +28,7 @@ It has two parts that work together:
 - the `WowPad` addon (bar, menus, options) goes in `Interface/AddOns`.
 
 Made and tested on Linux (CachyOS, Faugus Launcher / Proton) with an Xbox-style
-pad and the 2026 Steam Controller. Windows should work but is untested.
+pad and the 2026 Steam Controller. Windows has been tested as well.
 
 > Using a DLL with a game is your own call. Ask your server's staff before
 > using or sharing it.
@@ -46,7 +46,7 @@ these addons have been either fixed to work or were working by default:
 
 ## Download
 
-Get **WowPad-1.3.1.zip** from the
+Get **WowPad-1.4.0.zip** from the
 [Releases page](https://github.com/Oddity-git/WoW-Pad/releases) (not the green
 "Code" button: that is the source code). Unzip it and follow **Install** below.
 
@@ -100,10 +100,10 @@ that contains `Wow.exe`.
    start with WowPad, or the file disappears: Windows Security > Virus & threat
    protection > **Protection history**, find the item and choose **Restore** /
    **Allow on device**. Adding your WoW folder as an exclusion stops it
-   happening again. Scan results: [VirusTotal](https://www.virustotal.com/gui/file/ac3b5af73f5ee8f8966699cae28f4b4ea8078b3ec265a27dad76fc17b3ff4a96). Its SHA-256 is
-   `ac3b5af73f5ee8f8966699cae28f4b4ea8078b3ec265a27dad76fc17b3ff4a96`, so you can check yours is the original.
+   happening again. Scan results: [VirusTotal](https://www.virustotal.com/gui/file/bf24eb36348f25fd63cd9022f1059013810329307207b0106cb7827f7964e258). Its SHA-256 is
+   `bf24eb36348f25fd63cd9022f1059013810329307207b0106cb7827f7964e258`, so you can check yours is the original.
 4. **Start the game.** A `wowpad.log` appears next to `Wow.exe`; its first
-   line says `wowpad 1.3.1 loaded`.
+   line says `wowpad 1.4.0 loaded`.
 
 **Updating from an older version?** Replace `version.dll` and the whole
 `WowPad` folder, then restart the game fully (a `/reload` doesn't pick up new
@@ -141,7 +141,7 @@ Interface/AddOns/WowPad/   (or interface/addons/WowPad on Linux)
 | B | Clear target / back out of menus |
 | X | Interact + start attacking a hostile target |
 | Y | Target menu |
-| LB / RB | Target nearest friendly / enemy (can be swapped in Options) |
+| LB / RB | Target nearest friendly / enemy (can be swapped in Options; see Healer mode) |
 | LB + RB held | Right stick zooms the camera |
 | D-pad | 4 action slots |
 | LT / RT / LT+RT held | Left / right / bottom set: D-pad + A/B/X/Y = 8 more slots each |
@@ -149,8 +149,8 @@ Interface/AddOns/WowPad/   (or interface/addons/WowPad on Linux)
 | R3 | Pointer mode: right stick moves a cursor, RT = left click, LT = right click |
 | Start | Close windows, open the radial main menu |
 | Back | Tap = map, hold = bags |
-| Back + A | Enter: open chat / send the message |
-| Back + B | Esc: close chat (outside chat: like the Esc key) |
+| Back + A | On-screen keyboard (see Chat); in the keyboard or chat box: send |
+| Back + B | Esc: close the keyboard or chat (elsewhere: like the Esc key) |
 | Back + Start held 1 s | Kill switch: WowPad stops sending anything |
 
 Mouse or keyboard input switches back to normal desktop control at once;
@@ -162,11 +162,11 @@ any controller input switches to controller mode.
 |---|---|
 | D-pad / right stick | Move the selection (at the end of a list, the D-pad scrolls it) |
 | A | Click |
-| X | Right-click (use, equip, sell) |
+| X | Right-click (use, equip, sell). Quest log: track / untrack the quest |
 | Y tap / hold | Preview gear in the dressing room / compare with what you wear |
 | L3 (in bags) | Item actions: Disenchant (if you can), Destroy (asks first), Cancel (preselected) |
 | LB / RB | Switch between open windows |
-| B | Close / cancel |
+| B | Close / cancel (Esc menu: Return to Game, option windows: Cancel) |
 
 A hint bar under the window shows what the buttons do for the selected item.
 Works with default bags and with bag addons such as Bagnon. Each open window
@@ -175,14 +175,30 @@ you back to the top.
 
 **Dungeon finder and loot rolls:** when a dungeon is ready, the window gets the
 selection with **Enter Dungeon** selected (B = Leave Queue). Group loot rolls
-get it too, with Need (or Greed) selected (B = Pass). In combat these windows
-leave your controls alone; roll when the fight is over.
+get it too, with Need (or Greed) selected (B = Pass, Y = preview / compare the
+item). In combat these windows leave your controls alone; roll when the fight
+is over.
 
-**Chat:** while you type, the chat box takes every key, so A and B can't reach
-WowPad. Use **Back + A** to send (or to open chat) and **Back + B** to close it;
-a hint shows above the chat box. This only makes sure you can't get stuck in
-chat: WowPad has no on-screen keyboard, so typing still needs a keyboard or
-your system's own (e.g. the Steam Deck keyboard).
+### Chat: on-screen keyboard
+
+**Back + A** opens a small keyboard above the chat window (controller mode, out
+of combat). It's meant for short messages and commands like `/reload`; a real
+keyboard (or the Steam Deck's) works as usual.
+
+| Button | Does |
+|---|---|
+| D-pad | Move between keys |
+| A / X | Type / type a capital |
+| Y | Space |
+| B | Delete a letter (on an empty line: close) |
+| LB / RB | Channel: Say, Party, Guild, Raid, Reply |
+| Start or Back + A | Send |
+| Back + B | Close |
+
+Slash commands work (`/reload`, `/w name ...`). You can also click the keys
+with the mouse or a touchpad. Don't need it? Turn off **On-screen keyboard** in
+Options: Back + A then just opens the normal chat box, and Back + A / Back + B
+send or close it while you type.
 
 ### World map
 
@@ -196,6 +212,36 @@ and player coordinates.
 | X | Zoom out |
 | D-pad | Jump between pins and map buttons |
 | B | Back a level (zone, continent, world), then close |
+
+### Ground-targeted spells
+
+Spells you aim at the ground (Blizzard, Flare, Death and Decay, ...): aim with
+the camera, then press **A** or **the same button again** to place the spell at
+the crosshair. **B** cancels. A hint above the cast bar shows this while you
+aim. Let the camera come to rest before placing; placing while it's still
+turning can cause a small hiccup. Needs Hardware Cursor (Esc > Video, on by
+default).
+
+### Healer mode
+
+Off by default: Options > Buttons > **Healer mode**, then **Apply**.
+
+- **Tap** your ally bumper (LB, or RB if you swapped them) to target your last
+  party pick (you at first).
+- **Hold** it and flick the right stick **down / up** for the next / previous
+  party member (you, then party 1-4). Left / right still turns the camera.
+- A gold frame briefly marks the picked member's unit frame.
+
+Works in combat. With healer mode off, the ally bumper targets the nearest
+friendly as before.
+
+### Utility ring
+
+Eight spells, items or macros on one button. Options > WowPad > Bars >
+**Utility ring**: pick the button that opens it (a D-pad button, or any slot
+in the LT, RT or LT+RT set), then **Apply**. Fill its eight wedges in **Edit bar layout** (the ring shows in
+the middle of the screen). In game: hold the button, point the right stick at a
+wedge, let go to use it. Let go in the middle to cancel. Works in combat.
 
 ### Lite bar
 
@@ -240,7 +286,8 @@ need **Apply** (reloads the UI).
 - **Crosshair:** dot on/off, crosshair tooltips ("peek") and peek delay.
   Keep **crosshair tooltips on**: turning it off is experimental, the camera
   can jump after closing a window.
-- **Buttons:** X also starts auto attack; swap LB / RB targeting.
+- **Buttons:** X also starts auto attack; swap LB / RB targeting; healer mode;
+  on-screen keyboard.
 - **Messages:** status line, debug messages.
 - **Experimental:** walk/run by stick tilt, smooth camera (glides the camera;
   `[Camera] SmoothMs` in `wowpad.ini` sets how much).
@@ -249,6 +296,7 @@ need **Apply** (reloads the UI).
 
 - **Controller bar:** always visible, hide Blizzard's bars, size, edit layout.
 - **Lite mode:** one cluster at a time (see "Lite bar" above).
+- **Utility ring:** which button opens it (see "Utility ring" above).
 - **Extra bars:** WowPad's own XP bar, reputation bar, pet bar and movable
   cast bar. Each can be turned off, e.g. to use another addon's version
   instead. Move and resize them in **Edit bar layout**.
@@ -274,6 +322,8 @@ Chat commands: `/wp firsttime`, `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp
   removed it, see Install.
 - **Camera jumps after closing a menu:** turn crosshair tooltips (peek) on.
 - **X doesn't interact:** `/wp interact` shows what F is bound to.
+- **Ground-targeted spells don't place:** turn on Hardware Cursor (Esc > Video)
+  and let the camera come to rest before pressing.
 - **A Lua error mentions WowPad:** send the error text and `wowpad.log`.
 - **Crosshair stuck somewhere other than its usual spot:** press R3 twice
   (pointer mode on, then off). That puts it back.
@@ -290,7 +340,6 @@ Chat commands: `/wp firsttime`, `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp
   closing a window.
 - Assigning action bar slots with the controller (picking from the
   spellbook) instead of dragging with the mouse.
-- Testing on Windows.
 - Steam Controller extras: trackpads, gyro and back buttons.
 
 Have an idea or found a bug? Open an issue with your `wowpad.log`.

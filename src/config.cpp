@@ -1,3 +1,4 @@
+// config.cpp - reads wowpad.ini and logs the values in use.
 #include <windows.h>
 #include <stdlib.h>
 #include <stdio.h>

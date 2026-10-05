@@ -1,9 +1,10 @@
 -- ExtraBars.lua - WowPad's own XP/reputation bar, pet bar and cast bar.
 -- Each can be turned off (Options > WowPad > Bars) to use another addon's.
 --
--- Blizzard's versions are hidden with the rest of the bottom UI (BlizzBars.lua)
--- and keep re-positioning themselves, so these are our own, Bartender-style.
--- Both move and scale independently in Edit Bar mode (drag the labelled box,
+-- Blizzard's XP and pet bars are hidden with the rest of the bottom UI
+-- (BlizzBars.lua) and keep re-positioning themselves, so these are our own,
+-- Bartender-style; Blizzard's cast bar is switched off while ours is on.
+-- Each moves and scales independently in Edit Bar mode (drag the labelled box,
 -- mouse wheel to resize). Positions/scales are account-wide (WowPadDB.extra).
 --
 -- Pet bar: secure buttons of type "pet" (cast) + "/petautocasttoggle" on right
@@ -93,7 +94,7 @@ local CAP = "Interface\\AddOns\\WowPad\\Textures\\barcap"
 local RING = "Interface\\AddOns\\WowPad\\Textures\\barcapring"
 local FLAT = "Interface\\Buttons\\WHITE8X8"
 local EDGE = { 0.72, 0.56, 0.33, 1 }
-local function RoundBar(parent, w, h, r, g, b)
+local function RoundBar(parent, w, h)
   local f = CreateFrame("Frame", nil, parent)
   f:SetSize(w, h)
   local cw = h / 2

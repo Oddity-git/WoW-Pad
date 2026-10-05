@@ -1,11 +1,11 @@
--- Radial.lua - Start: main menu wheel (fixed position and size).
+-- Radial.lua - the Start button's main menu wheel (fixed position and size).
 --
 -- 8 wedges per page, LB/RB change page, D-pad or right-stick pointer selects,
 -- A opens, B or Start closes. Every wedge is a secure button that runs a
--- /macro or clicks a Blizzard micro button, so opening panels doesn't taint
--- the UI. (Character/Talents/Game Menu/Achievements/LFD/PvP micro buttons
--- react to mouse down/up, not :Click(), so those use their toggle functions.) Out of combat only for now (showing a frame full of
--- secure buttons is blocked in combat).
+-- macro (or, for entries with a click field, clicks a named button), so
+-- opening panels doesn't taint the UI. Out of combat only (showing a frame
+-- full of secure buttons is blocked in combat). Also provides the wheel art
+-- shared with the utility ring (WP.BuildWheelArt).
 
 local WP = WowPad
 
@@ -62,43 +62,50 @@ local ROT = {
 }
 local function Turn(tex, k) tex:SetTexCoord(unpack(ROT[k % 4])) end
 
-local hub = CreateFrame("Frame", nil, R)
-hub:SetSize(WHEEL, WHEEL)
-hub:SetPoint("CENTER", 0, 10)
-hub:SetFrameLevel(R:GetFrameLevel())   -- under the wedge buttons
+-- Shared wheel art: also used by the utility ring (ActionBar.lua). Returns
+-- the hub frame and a Highlight(index or nil) function (1 = top, clockwise).
 local FILL, FILL_SEL, GLOW = { 0.04, 0.05, 0.08, 0.62 }, { 0.30, 0.24, 0.10, 0.78 }, { 1, 0.78, 0.25, 1 }
-local fills, glows = {}, {}
-for i = 1, 8 do                       -- 1 = top, clockwise
-  local k, shape = math.floor((i - 1) / 2), (i % 2 == 1) and "0" or "45"
-  local f = hub:CreateTexture(nil, "BACKGROUND")
-  f:SetTexture(TEX .. "radial_wedge" .. shape)
-  f:SetAllPoints()
-  Turn(f, k)
-  f:SetVertexColor(unpack(FILL))
-  fills[i] = f
-  local g = hub:CreateTexture(nil, "BORDER")
-  g:SetTexture(TEX .. "radial_glow" .. shape)
-  g:SetAllPoints()
-  g:SetBlendMode("ADD")
-  Turn(g, k)
-  g:SetVertexColor(unpack(GLOW))
-  g:Hide()
-  glows[i] = g
+function WP.BuildWheelArt(parent, size)
+  local hub = CreateFrame("Frame", nil, parent)
+  hub:SetSize(size, size)
+  hub:SetFrameLevel(parent:GetFrameLevel())   -- under the wedge buttons
+  local fills, glows = {}, {}
+  for i = 1, 8 do                       -- 1 = top, clockwise
+    local k, shape = math.floor((i - 1) / 2), (i % 2 == 1) and "0" or "45"
+    local f = hub:CreateTexture(nil, "BACKGROUND")
+    f:SetTexture(TEX .. "radial_wedge" .. shape)
+    f:SetAllPoints()
+    Turn(f, k)
+    f:SetVertexColor(unpack(FILL))
+    fills[i] = f
+    local g = hub:CreateTexture(nil, "BORDER")
+    g:SetTexture(TEX .. "radial_glow" .. shape)
+    g:SetAllPoints()
+    g:SetBlendMode("ADD")
+    Turn(g, k)
+    g:SetVertexColor(unpack(GLOW))
+    g:Hide()
+    glows[i] = g
+  end
+  for _, spot in ipairs({ { "TOPRIGHT", 0 }, { "BOTTOMRIGHT", 1 }, { "BOTTOMLEFT", 2 }, { "TOPLEFT", 3 } }) do
+    local t = hub:CreateTexture(nil, "ARTWORK")
+    t:SetTexture(TEX .. "radial_frame")
+    t:SetSize(size / 2, size / 2)
+    t:SetPoint(spot[1])
+    Turn(t, spot[2])
+  end
+  local selected
+  local function Highlight(idx)
+    if idx == selected then return end
+    if selected then fills[selected]:SetVertexColor(unpack(FILL)); glows[selected]:Hide() end
+    selected = idx
+    if idx then fills[idx]:SetVertexColor(unpack(FILL_SEL)); glows[idx]:Show() end
+  end
+  return hub, Highlight
 end
-for q, spot in ipairs({ { "TOPRIGHT", 0 }, { "BOTTOMRIGHT", 1 }, { "BOTTOMLEFT", 2 }, { "TOPLEFT", 3 } }) do
-  local t = hub:CreateTexture(nil, "ARTWORK")
-  t:SetTexture(TEX .. "radial_frame")
-  t:SetSize(WHEEL / 2, WHEEL / 2)
-  t:SetPoint(spot[1])
-  Turn(t, spot[2])
-end
-local selected
-local function Highlight(idx)
-  if idx == selected then return end
-  if selected then fills[selected]:SetVertexColor(unpack(FILL)); glows[selected]:Hide() end
-  selected = idx
-  if idx then fills[idx]:SetVertexColor(unpack(FILL_SEL)); glows[idx]:Show() end
-end
+
+local hub, Highlight = WP.BuildWheelArt(R, WHEEL)
+hub:SetPoint("CENTER", 0, 10)
 
 local title = R:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetPoint("TOP", 0, 0)
@@ -229,9 +236,20 @@ table.insert(WP.setupHooks, function()
   start:RegisterForClicks("AnyDown")
   start:SetAttribute("type", "macro")
   start:SetAttribute("macrotext", "/run CloseAllWindows() CloseDropDownMenus()")
-  local wasOpen
-  start:SetScript("PreClick", function() wasOpen = R:IsShown() end)
-  start:SetScript("PostClick", function()
+  local wasOpen, kbSend
+  start:SetScript("PreClick", function(self)
+    wasOpen = R:IsShown()
+    -- Keyboard open: Start sends the line instead of closing everything.
+    kbSend = WP.Keyboard and WP.Keyboard:IsShown() and not InCombatLockdown()
+    if kbSend then self:SetAttribute("type", nil) end
+  end)
+  start:SetScript("PostClick", function(self)
+    if kbSend then
+      kbSend = false
+      if not InCombatLockdown() then self:SetAttribute("type", "macro") end
+      WP.Keyboard.Send()
+      return
+    end
     for _, o in ipairs(WP.overlays) do
       if o ~= R and o:IsShown() and not InCombatLockdown() then o:Hide() end
     end

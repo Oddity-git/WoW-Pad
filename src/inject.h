@@ -1,9 +1,9 @@
 // inject.h - synthetic keyboard/mouse input into the game.
 //
-// Every event carries dwExtraInfo = WOWPAD_INPUT_TAG so Phase 3 can tell our
-// events apart from the user's real keyboard/mouse.
+// Every event carries dwExtraInfo = WOWPAD_INPUT_TAG so hooks.cpp can tell
+// our events apart from the user's real keyboard/mouse.
 // Held keys/buttons are tracked so Inject_ReleaseAll() can never leave
-// anything stuck (focus loss, kill switch, disconnect).
+// anything stuck (focus loss, kill switch, mode switch, shutdown).
 #pragma once
 #include <windows.h>
 
@@ -17,5 +17,4 @@ void Inject_Key(BYTE vk, bool down);           // no-op if already in that state
 void Inject_MouseButton(MouseBtn b, bool down); // no-op if already in that state
 void Inject_MouseMove(int dx, int dy);          // relative, pixels
 void Inject_MouseWheel(int notches);            // + = away from you (zoom in)
-bool Inject_AnythingHeld();
 void Inject_ReleaseAll();
