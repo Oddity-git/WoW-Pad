@@ -329,15 +329,41 @@ function WP.PopupRoots()
   return list
 end
 
+-- Other addons' windows that don't register with the game's panel system
+-- (so GetUIPanel/UISpecialFrames don't list them) but should count as open
+-- windows. DialogUI: DGossipFrame (its quest frame is a normal UI panel).
+WP.EXTRA_WINDOWS = { "DGossipFrame", "DQuestFrame" }
+
+-- A window some addon keeps "open" but out of sight (New Era cloaks Blizzard's
+-- profession window: alpha 0, moved off-screen, still shown). It isn't a
+-- window the player can use, so WowPad ignores it.
+function WP.Cloaked(f)
+  if not (f and f.GetLeft and f.GetEffectiveScale) then return false end
+  local a = (f.GetEffectiveAlpha and f:GetEffectiveAlpha()) or (f.GetAlpha and f:GetAlpha()) or 1
+  if a < 0.05 then return true end
+  local l, r, t, b = f:GetLeft(), f:GetRight(), f:GetTop(), f:GetBottom()
+  if not l then return false end
+  local s = f:GetEffectiveScale()
+  local us = UIParent:GetEffectiveScale()
+  local W, H = (UIParent:GetWidth() or 0) * us, (UIParent:GetHeight() or 0) * us
+  return r * s <= 0 or t * s <= 0 or l * s >= W or b * s >= H
+end
+local function Open(f) return f and f:IsShown() and not WP.Cloaked(f) end
+
 local function AnyWindowOpen()
   if WP.Bar and WP.Bar.editing then return true end
+  for _, name in ipairs(WP.EXTRA_WINDOWS) do
+    local f = _G[name]
+    if f and f.IsShown and Open(f) then return true end
+  end
   -- Out of combat only: in combat these must not take the camera away.
   if not InCombatLockdown() and #WP.PopupRoots() > 0 then return true end
   for _, o in ipairs(WP.overlays) do
     if o:IsShown() then return true end
   end
   for _, side in ipairs({ "left", "center", "right", "doublewide", "fullscreen" }) do
-    if GetUIPanel and GetUIPanel(side) then return true end
+    local p = GetUIPanel and GetUIPanel(side)
+    if p and not WP.Cloaked(p) then return true end
   end
   for i = 1, NUM_CONTAINER_FRAMES or 13 do
     local f = _G["ContainerFrame" .. i]
@@ -345,7 +371,7 @@ local function AnyWindowOpen()
   end
   for _, name in ipairs(UISpecialFrames) do
     local f = WP.AsFrame(_G[name])
-    if f and f:IsShown() then return true end
+    if Open(f) then return true end
   end
   for i = 1, STATICPOPUP_NUMDIALOGS or 4 do
     local f = _G["StaticPopup" .. i]
@@ -516,6 +542,8 @@ SlashCmdList.WOWPAD = function(msg)
     if v and WP.Bar then WP.Bar.SetScale(v) else Print("Usage: /wp scale 0.8") end
   elseif msg == "navinfo" then
     if WP.Nav and WP.Nav.Info then WP.Nav.Info() end
+  elseif msg == "firsttime" or msg == "setup" or msg == "welcome" then
+    if WP.ShowFirstTime then WP.ShowFirstTime(1) end
   elseif msg == "options" or msg == "config" then
     if WP.OpenOptions then WP.OpenOptions() end
   elseif msg == "sens" then
@@ -526,6 +554,6 @@ SlashCmdList.WOWPAD = function(msg)
     WP.UpdateStatus()
   else
     Print(("mode=%s set=%s context=%s pointer=%s"):format(WP.mode, tostring(WP.set), tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp options | sens <0.05-2> | edit | bar | blizz | crosshair | scale <0.4-1.6> | xattack | interact [KEY] | status | debug")
+    Print("/wp firsttime | options | sens <0.05-2> | edit | bar | blizz | crosshair | scale <0.4-1.6> | xattack | interact [KEY] | status | debug")
   end
 end

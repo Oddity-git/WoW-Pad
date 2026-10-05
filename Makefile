@@ -4,7 +4,7 @@ ifeq ($(origin CXX),default)
 CXX      := i686-w64-mingw32-g++
 endif
 OBJDUMP  ?= i686-w64-mingw32-objdump
-VERSION ?= 1.3.0
+VERSION ?= 1.3.1
 
 BUILD    := build
 SRCS     := $(wildcard src/*.cpp)

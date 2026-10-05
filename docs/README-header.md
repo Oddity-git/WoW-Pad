@@ -38,6 +38,8 @@ these addons have been either fixed to work or were working by default:
 - AIO
 - Auctionator
 - Bagnon
+- DialogUI
+- DragonUI and DragonUI New Era (with !!!ClassicAPI)
 - Postal
 - Questie-335
 

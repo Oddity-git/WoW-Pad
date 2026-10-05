@@ -181,6 +181,15 @@ local function Build()
     .. "(about 60 ms, [Camera] SmoothMs in wowpad.ini). Camera only, not the pointer.",
     R - 4, -250, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
 
+  local ft = CreateFrame("Button", "WowPadOptFirstTime", panel, "UIPanelButtonTemplate")
+  ft:SetSize(170, 22)
+  ft:SetPoint("TOPLEFT", R - 4, -286)
+  ft:SetText("First-time setup")
+  ft:SetScript("OnClick", function()
+    if InterfaceOptionsFrame then InterfaceOptionsFrame:Hide() end
+    if WP.ShowFirstTime then WP.ShowFirstTime(1) end
+  end)
+
   -- Bars page
   target = barsPanel
   local bt = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")

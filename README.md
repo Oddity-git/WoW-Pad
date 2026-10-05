@@ -1,4 +1,4 @@
-# <h1 align="center">WowPad 1.3.0</h1>
+# <h1 align="center">WowPad 1.3.1</h1>
 
 
 
@@ -39,12 +39,14 @@ these addons have been either fixed to work or were working by default:
 - AIO
 - Auctionator
 - Bagnon
+- DialogUI
+- DragonUI and DragonUI New Era (with !!!ClassicAPI)
 - Postal
 - Questie-335
 
 ## Download
 
-Get **WowPad-1.3.0.zip** from the
+Get **WowPad-1.3.1.zip** from the
 [Releases page](https://github.com/Oddity-git/WoW-Pad/releases) (not the green
 "Code" button: that is the source code). Unzip it and follow **Install** below.
 
@@ -59,8 +61,8 @@ Get **WowPad-1.3.0.zip** from the
   pressing W/S and Q/E (strafe); if you moved those, set your keys in
   `wowpad.ini` under `[Move]`. Its own signals use numpad keys and some
   Alt+Ctrl+Shift combos as temporary bindings, so they don't change yours.
-- **Hardware Cursor** turned on: Esc > Video > Hardware Cursor. The crosshair
-  needs it to hide the hand/sword cursor.
+- **Windows:** reported working by players (including the Steam Controller
+  through Steam). Windows Defender may remove `version.dll`, see Install.
 - **Recommended: [Awesome WotLK](https://github.com/someweirdhuman/awesome_wotlk)**
   (client mod by someweirdhuman, based on FrostAtom's original). Its
   interaction keybind is what makes X loot, skin, gather, open doors and
@@ -91,10 +93,17 @@ that contains `Wow.exe`.
    | **Steam (non-Steam game)** | Properties > Launch options: `WINEDLLOVERRIDES="version=n,b" %command%` |
    | **Plain Wine** | `WINEDLLOVERRIDES="version=n,b" wine Wow.exe` |
 
-   Windows needs no setting (untested on Windows; an antivirus may question
-   the DLL because it reads input and sends key presses).
+   Windows needs no setting.
+
+   **Windows Defender may delete `version.dll`.** It reads the controller and
+   sends key presses, which antivirus programs sometimes flag. If the game won't
+   start with WowPad, or the file disappears: Windows Security > Virus & threat
+   protection > **Protection history**, find the item and choose **Restore** /
+   **Allow on device**. Adding your WoW folder as an exclusion stops it
+   happening again. Scan results: [VirusTotal](https://www.virustotal.com/gui/file/ac3b5af73f5ee8f8966699cae28f4b4ea8078b3ec265a27dad76fc17b3ff4a96). Its SHA-256 is
+   `ac3b5af73f5ee8f8966699cae28f4b4ea8078b3ec265a27dad76fc17b3ff4a96`, so you can check yours is the original.
 4. **Start the game.** A `wowpad.log` appears next to `Wow.exe`; its first
-   line says `wowpad 1.3.0 loaded`.
+   line says `wowpad 1.3.1 loaded`.
 
 **Updating from an older version?** Replace `version.dll` and the whole
 `WowPad` folder, then restart the game fully (a `/reload` doesn't pick up new
@@ -110,7 +119,9 @@ Interface/AddOns/WowPad/   (or interface/addons/WowPad on Linux)
 
 ### First time in game
 
-1. Esc > Video > **Hardware Cursor** on.
+1. The **setup window** opens: it checks your controller, movement keys,
+   interact key and camera setting, and shows where everything lives. Reopen
+   it any time with `/wp firsttime` (or Options > First-time setup).
 2. Pick up the controller: WowPad switches to controller mode by itself.
 3. Left-click the **gamepad button on the minimap** (or Start > page 3 >
    **Edit Bar**, or `/wp edit`): drag spells, items, macros and mounts onto
@@ -247,7 +258,7 @@ need **Apply** (reloads the UI).
 Advanced settings (deadzones, key names, speeds) are in `wowpad.ini` next to
 `Wow.exe`; restart the game after editing it.
 
-Chat commands: `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp bar`,
+Chat commands: `/wp firsttime`, `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp bar`,
 `/wp blizz`, `/wp crosshair`, `/wp peek`, `/wp sens 0.5`, `/wp interact KEY`,
 `/wp xattack`, `/wp status`, `/wp debug`, `/wp navinfo`.
 
@@ -257,7 +268,10 @@ Chat commands: `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp bar`,
 - **Nothing happens with the controller:** check `wowpad.log` exists. No log =
   the DLL isn't loading: the `WINEDLLOVERRIDES=version=n,b` setting is missing
   or in the wrong place. Log says no controller: close Steam, reconnect the pad.
-- **Hand/sword cursor visible over the crosshair:** turn on Hardware Cursor.
+- **Hand/sword cursor visible over the crosshair:** turn on Hardware Cursor
+  (Esc > Video).
+- **Game won't start, or `version.dll` vanished (Windows):** Windows Defender
+  removed it, see Install.
 - **Camera jumps after closing a menu:** turn crosshair tooltips (peek) on.
 - **X doesn't interact:** `/wp interact` shows what F is bound to.
 - **A Lua error mentions WowPad:** send the error text and `wowpad.log`.

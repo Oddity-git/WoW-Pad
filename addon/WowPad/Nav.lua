@@ -21,13 +21,16 @@ local NODE_TYPES = { Button = true, CheckButton = true, EditBox = true }
 local function CollectRoots()
   local roots, seen = {}, {}
   local function add(f)
-    if f and not seen[f] and f.IsVisible and f:IsVisible() then seen[f] = true; roots[#roots + 1] = f end
+    if f and not seen[f] and f.IsVisible and f:IsVisible() and not WP.Cloaked(f) then
+      seen[f] = true; roots[#roots + 1] = f
+    end
   end
   for _, o in ipairs(WP.overlays) do add(o) end
   for level = (UIDROPDOWNMENU_MAXLEVELS or 2), 1, -1 do add(_G["DropDownList" .. level]) end
   for i = 1, STATICPOPUP_NUMDIALOGS or 4 do add(_G["StaticPopup" .. i]) end
   for _, f in ipairs(WP.PopupRoots()) do add(f) end   -- dungeon ready, loot rolls
   add(LootFrame)
+  for _, name in ipairs(WP.EXTRA_WINDOWS) do add(_G[name]) end
   if GetUIPanel then
     for _, side in ipairs({ "center", "left", "right", "doublewide", "fullscreen" }) do add(GetUIPanel(side)) end
   end
@@ -106,8 +109,25 @@ local function IsBags(root)
   return n and n:find("^ContainerFrame") ~= nil
 end
 
+-- Side panels other addons keep as separate frames next to a window (so they
+-- aren't its children): navigated as part of that window. New Era's
+-- profession tabs sit beside both its profession windows.
+local ATTACHED = {
+  NE_ProfessionsBookFrame     = { "NE_ProfessionsTabs" },
+  NE_ProfessionsCraftingFrame = { "NE_ProfessionsTabs" },
+}
+
 -- The frames a root stands for (all open bags for the bags root).
 local function RootFrames(root)
+  local extra = ATTACHED[root:GetName() or ""]
+  if extra then
+    local list = { root }
+    for _, n in ipairs(extra) do
+      local f = _G[n]
+      if f and f:IsVisible() then list[#list + 1] = f end
+    end
+    return list
+  end
   if not IsBags(root) then return { root } end
   local list = {}
   for i = 1, NUM_CONTAINER_FRAMES or 13 do
@@ -382,7 +402,7 @@ local FRIENDLY = {
   FriendsFrame = "Social", GossipFrame = "Gossip", QuestFrame = "Quest", LootFrame = "Loot",
   BankFrame = "Bank", MailFrame = "Mail", TradeFrame = "Trade", AuctionFrame = "Auction House",
   ClassTrainerFrame = "Trainer", TaxiFrame = "Flight Map", GameMenuFrame = "Game Menu",
-  DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu", WowPadInfo = "Controller Map", WowPadItemActions = "Item",
+  DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu", WowPadInfo = "Controller Map", WowPadItemActions = "Item", WowPadFirstTime = "Setup", DGossipFrame = "Gossip", DQuestFrame = "Quest",
 }
 local function WindowName(f)
   local n = f and f:GetName()
@@ -477,7 +497,38 @@ local function Active()
   return WP.mode == "controller" and WP.ctx == "menu" and WP.set == 0 and not InCombatLockdown()
 end
 
+-- DialogUI's quest frame grabs the keyboard for its own shortcuts (Space,
+-- 1-9), which swallows the pad's keys. In controller mode, let them through.
+-- Some addon windows (DialogUI) keep invisible, clickable buttons around
+-- (unused option slots, helper buttons). In those windows, only buttons that
+-- show something (text or a visible picture) count as stops.
+local SHOWS_ONLY = { DGossipFrame = true, DQuestFrame = true }
+local function ShowsSomething(b)
+  if b.GetText then
+    local t = b:GetText()
+    if t and t ~= "" then return true end
+  end
+  if b:GetObjectType() == "EditBox" then return true end
+  for _, r in ipairs({ b:GetRegions() }) do
+    if r:IsShown() and (r.GetAlpha == nil or r:GetAlpha() > 0.05) then
+      local layer = r.GetDrawLayer and r:GetDrawLayer()
+      if layer ~= "HIGHLIGHT" then
+        if r:GetObjectType() == "Texture" and r:GetTexture() then return true end
+        if r:GetObjectType() == "FontString" and (r:GetText() or "") ~= "" then return true end
+      end
+    end
+  end
+  return false
+end
+
+local function ReleaseKeyboardGrabs()
+  if WP.mode ~= "controller" then return end
+  local q = _G.DQuestFrame
+  if q and q:IsShown() and q.IsKeyboardEnabled and q:IsKeyboardEnabled() then q:EnableKeyboard(false) end
+end
+
 function Nav.Refresh()
+  ReleaseKeyboardGrabs()
   Nav.roots = CollectRoots()
   local open = {}
   for _, r in ipairs(Nav.roots) do open[r] = true end
@@ -498,6 +549,11 @@ function Nav.Refresh()
   local nodes, scrolls = {}, {}
   if Nav.root then
     for _, f in ipairs(RootFrames(Nav.root)) do Collect(f, nodes, 0, scrolls) end
+    if SHOWS_ONLY[Nav.root:GetName() or ""] then
+      local kept = {}
+      for _, n in ipairs(nodes) do if ShowsSomething(n) then kept[#kept + 1] = n end end
+      nodes = kept
+    end
   end
   Nav.nodes, Nav.nodeSet, Nav.scrolls = nodes, {}, scrolls
   for _, n in ipairs(nodes) do Nav.nodeSet[n] = true end
@@ -533,6 +589,10 @@ function Nav.Refresh()
     local rn = Nav.root and Nav.root:GetName()
     if Nav.root and Nav.root.which == "WOWPAD_DESTROY" then pref = { _G[rn .. "Button2"] }
     elseif rn == "WowPadItemActions" then pref = { WowPadItemActionsCancel }
+    elseif rn == "WowPadFirstTime" then pref = { WowPadFirstTimeNext }
+    elseif rn == "DGossipFrame" then pref = { _G.DGossipTitleButton1 }
+    elseif rn == "DQuestFrame" then
+      pref = { _G.DQuestFrameAcceptButton, _G.DQuestFrameCompleteButton, _G.DQuestFrameCompleteQuestButton }
     elseif rn == "LFDDungeonReadyDialog" then pref = { FindButton(Nav.root, "EnterDungeonButton", ENTER_DUNGEON) }
     elseif rn and rn:find("^GroupLootFrame%d") then
       -- Need if allowed, else Greed (disabled buttons aren't nodes).
@@ -646,6 +706,14 @@ function Nav.BackTarget()
     if z and z:IsVisible() and z:IsEnabled() and (GetCurrentMapContinent() or 0) > 0 then return z end
   end
   if name then
+    -- DialogUI quest window: B = Goodbye / Decline / Cancel, whichever shows.
+    if name == "DQuestFrame" then
+      for _, n in ipairs({ "DQuestFrameGoodbyeButton", "DQuestFrameGreetingGoodbyeButton",
+                           "DQuestFrameDeclineButton", "DQuestFrameCancelButton" }) do
+        local b = _G[n]
+        if b and b:IsVisible() then return b end
+      end
+    end
     -- Dungeon ready: B = Leave Queue. Loot roll: B = Pass.
     local special = (name == "LFDDungeonReadyDialog" and FindButton(root, "LeaveButton", LEAVE_QUEUE))
                  or (name:find("^GroupLootFrame%d") and _G[name .. "PassButton"])
@@ -656,7 +724,13 @@ function Nav.BackTarget()
       local b1 = _G[name .. "Button1"]
       if b1 and b1:IsVisible() then return b1 end
     end
+    -- Named <window>CloseButton, else the window's .CloseButton field (New
+    -- Era and modern templates leave it unnamed), else a child named *CloseButton.
     local close = _G[name .. "CloseButton"]
+    if not (close and close:IsVisible()) then
+      local cb = rawget(root, "CloseButton")
+      if type(cb) == "table" and cb.IsVisible and cb:IsVisible() then close = cb end
+    end
     if not (close and close:IsVisible()) then
       close = nil
       for _, c in ipairs({ root:GetChildren() }) do
@@ -710,8 +784,11 @@ IB("WowPadNavDestroy", function()
   if not Active() then return end
   if WP.OpenItemActions then WP.OpenItemActions() else Nav.Destroy() end
 end)
-IB("WowPadNavPrev",  function() if WP.Radial and WP.Radial:IsShown() then WP.Radial.Page(-1) else Nav.CycleRoot(-1) end end)
-IB("WowPadNavNext",  function() if WP.Radial and WP.Radial:IsShown() then WP.Radial.Page(1) else Nav.CycleRoot(1) end end)
+-- LB/RB: pages of the radial / setup window, else switch windows.
+local function Paged() return (WP.Radial and WP.Radial:IsShown() and WP.Radial)
+                           or (WP.FirstTime and WP.FirstTime:IsShown() and WP.FirstTime) end
+IB("WowPadNavPrev",  function() local p = Paged() if p then p.Page(-1) else Nav.CycleRoot(-1) end end)
+IB("WowPadNavNext",  function() local p = Paged() if p then p.Page(1) else Nav.CycleRoot(1) end end)
 
 table.insert(WP.setupHooks, function()
   -- A / X: secure click on the selected node (left / right button).

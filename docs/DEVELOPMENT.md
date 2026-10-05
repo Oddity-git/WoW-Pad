@@ -199,3 +199,19 @@ With a window open (no trigger held): **Y tap** previews the selected item in th
   centre and the header's attribute snippet shows only the active one (works in combat). Position/scale are
   saved separately in WowPadDB.bar.lite; edit-mode tabs set the header attribute `liteview`.
 - **New addon file** (ItemActions.lua): WoW reads the TOC file list at game start; a /reload is not enough.
+
+## 1.3.1 notes
+- **FirstTime.lua:** setup/welcome window. Opens once per addon version (WowPadDB.firstTimeSeen = TOC version):
+  new installs on the setup check, people with existing settings on "What's new" (WHATS_NEW table, newest
+  first). Live checks: controller seen, movement binds W/S/Q/E, interact key binding, cameraSmoothStyle
+  (button sets 0), Hardware Cursor (gxCursor) only as a tip. /wp firsttime; Options button. New file: needs
+  a full game restart after updating.
+- **Other addons' windows:**
+  - `WP.EXTRA_WINDOWS` (Core.lua): windows that aren't UI panels or in UISpecialFrames (DialogUI's
+    DGossipFrame). DialogUI's DQuestFrame grabs the keyboard; Nav releases it in controller mode.
+  - `SHOWS_ONLY` (Nav.lua): in those windows only buttons with visible text/texture count (DialogUI keeps
+    invisible clickable buttons).
+  - `WP.Cloaked(f)`: windows with effective alpha < 0.05 or entirely off-screen are ignored (New Era
+    "cloaks" Blizzard's TradeSkillFrame instead of hiding it, and it stays a UI panel).
+  - B uses `root.CloseButton` when the close button has no name (New Era, modern templates).
+  - `ATTACHED` (Nav.lua): separate side frames navigated with a window (New Era's NE_ProfessionsTabs).
