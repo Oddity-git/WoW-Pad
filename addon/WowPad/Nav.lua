@@ -64,9 +64,32 @@ end
 ---------------------------------------------------------------------------
 -- Nodes
 ---------------------------------------------------------------------------
+-- Auction house rows (Browse / Bid / Auctions tabs): only the item icon is a
+-- stop; clicking it selects its row, and the whole-row buttons would double
+-- every step of the D-pad.
+local function AuctionRow(f)
+  local n = f:GetName()
+  if not n then return false end
+  for _, p in ipairs({ "^BrowseButton%d+$", "^BidButton%d+$", "^AuctionsButton%d+$" }) do
+    if n:find(p) then return _G[n .. "Item"] ~= nil end
+  end
+  return false
+end
+
+-- Never stops: money displays (their gold / silver / copper buttons only pick
+-- up coins) and the auction house's bid amount boxes (filled in for you when
+-- you pick a listing).
+local function Skipped(f)
+  local n = f:GetName()
+  if not n then return false end
+  return n:find("MoneyFrameGoldButton$") or n:find("MoneyFrameSilverButton$")
+      or n:find("MoneyFrameCopperButton$") or n:find("^BrowseBidPrice") ~= nil
+end
+
 local function Usable(f)
   local t = f:GetObjectType()
   if not NODE_TYPES[t] or not f:IsMouseEnabled() then return false end
+  if AuctionRow(f) or Skipped(f) then return false end
   if t ~= "EditBox" and f.IsEnabled and not f:IsEnabled() then return false end
   local w, h = f:GetWidth(), f:GetHeight()
   return w and h and w >= 6 and h >= 6
@@ -120,6 +143,15 @@ local ATTACHED = {
 }
 
 -- The frames a root stands for (all open bags for the bags root).
+-- Immersion's main frame has no size of its own: its talk box and option list
+-- are what you see (used for the selection box and the hint bar).
+local function ImmersionParts(root)
+  local list = { root.TalkBox }
+  local t = root.TitleButtons
+  if t and t:IsVisible() and (t.GetNumActive and t:GetNumActive() or 0) > 0 then list[#list + 1] = t end
+  return list
+end
+
 local function RootFrames(root)
   local extra = ATTACHED[root:GetName() or ""]
   if extra then
@@ -181,20 +213,14 @@ end
 ---------------------------------------------------------------------------
 -- Highlight + tooltip
 ---------------------------------------------------------------------------
+-- Selection box and window outline: the game's tooltip border (rounded
+-- corners), tinted gold / blue.
+local ROUNDED = "Interface\\Tooltips\\UI-Tooltip-Border"
 local hl = CreateFrame("Frame", "WowPadNavHighlight", UIParent)
 hl:SetFrameStrata("FULLSCREEN_DIALOG")
+hl:SetBackdrop({ edgeFile = ROUNDED, edgeSize = 16 })
+hl:SetBackdropBorderColor(1, 0.82, 0.1, 1)
 hl:Hide()
-local function Edge(p1, p2, w, h)
-  local t = hl:CreateTexture(nil, "OVERLAY")
-  t:SetTexture(1, 0.82, 0.1, 0.95)
-  t:SetPoint(p1); t:SetPoint(p2)
-  if w then t:SetWidth(w) end
-  if h then t:SetHeight(h) end
-end
-Edge("TOPLEFT", "TOPRIGHT", nil, 2)
-Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 2)
-Edge("TOPLEFT", "BOTTOMLEFT", 2, nil)
-Edge("TOPRIGHT", "BOTTOMRIGHT", 2, nil)
 
 local function CallScript(f, script)
   local fn = f and f:GetScript(script)
@@ -360,8 +386,8 @@ function Nav.Select(node)
   end
   if node then
     hl:ClearAllPoints()
-    hl:SetPoint("TOPLEFT", node, "TOPLEFT", -3, 3)
-    hl:SetPoint("BOTTOMRIGHT", node, "BOTTOMRIGHT", 3, -3)
+    hl:SetPoint("TOPLEFT", node, "TOPLEFT", -6, 6)
+    hl:SetPoint("BOTTOMRIGHT", node, "BOTTOMRIGHT", 6, -6)
     hl:Show()
     CallScript(node, "OnEnter")
     ShowCompare()
@@ -375,22 +401,13 @@ end
 ---------------------------------------------------------------------------
 local focus = CreateFrame("Frame", "WowPadNavFocus", UIParent)
 focus:SetFrameStrata("FULLSCREEN_DIALOG")
+focus:SetBackdrop({ edgeFile = ROUNDED, edgeSize = 20 })
+focus:SetBackdropBorderColor(0.35, 0.7, 1, 0.7)
 focus:Hide()
-local function FocusEdge(p1, p2, w, h)
-  local t = focus:CreateTexture(nil, "OVERLAY")
-  t:SetTexture(0.35, 0.7, 1, 0.6)
-  t:SetPoint(p1); t:SetPoint(p2)
-  if w then t:SetWidth(w) end
-  if h then t:SetHeight(h) end
-end
-FocusEdge("TOPLEFT", "TOPRIGHT", nil, 2)
-FocusEdge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 2)
-FocusEdge("TOPLEFT", "BOTTOMLEFT", 2, nil)
-FocusEdge("TOPRIGHT", "BOTTOMRIGHT", 2, nil)
 
 local hints = CreateFrame("Frame", "WowPadNavHints", UIParent)
 hints:SetFrameStrata("FULLSCREEN_DIALOG")
-hints:SetHeight(24)
+hints:SetHeight(28)
 hints:SetClampedToScreen(true)
 hints:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -398,8 +415,17 @@ hints:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                     insets = { left = 3, right = 3, top = 3, bottom = 3 } })
 hints:SetBackdropColor(0, 0, 0, 0.85)
 hints:Hide()
+-- The hint line is laid out piece by piece (WP.NewKeyLine, Glyphs.lua) so
+-- icons and words line up in every window. hintText keeps the whole line as
+-- text (hidden; read by the tests and /wp navinfo).
 local hintText = hints:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-hintText:SetPoint("CENTER")
+hintText:Hide()
+local HINT_PAD, HINT_GAP = 10, 4   -- gap between hints: about one space
+local hintLine = WP.NewKeyLine(hints, "GameFontHighlightSmall", 18)
+hintLine:SetPoint("LEFT", hints, "LEFT", HINT_PAD, 0)
+local function LayoutHints(parts)
+  hints:SetWidth(hintLine:SetParts(parts, HINT_GAP) + 2 * HINT_PAD)
+end
 
 local FRIENDLY = {
   MerchantFrame = "Vendor", CharacterFrame = "Character", SpellBookFrame = "Spellbook",
@@ -409,7 +435,7 @@ local FRIENDLY = {
   ClassTrainerFrame = "Trainer", TaxiFrame = "Flight Map", GameMenuFrame = "Game Menu",
   DressUpFrame = "Preview", WowPadRadial = "Main Menu", WowPadUnitMenuFrame = "Target Menu",
   WowPadInfo = "Controller Map", WowPadItemActions = "Item", WowPadFirstTime = "Setup",
-  WowPadKeyboard = "Keyboard", DGossipFrame = "Gossip", DQuestFrame = "Quest",
+  WowPadKeyboard = "Keyboard", DGossipFrame = "Gossip", DQuestFrame = "Quest", ImmersionFrame = "Dialog", OpenMailFrame = "Letter",
 }
 local function WindowName(f)
   local n = f and f:GetName()
@@ -424,6 +450,8 @@ local function WindowName(f)
 end
 
 local K = "|cffffd100%s|r %s"
+-- One hint: the button(s) in the chosen style (icons / names), then what it does.
+local function H(key, text) return { key = key, text = text } end
 function Nav.UpdateHints()
   local root = Nav.root
   if not root then focus:Hide(); hints:Hide(); return end
@@ -432,43 +460,57 @@ function Nav.UpdateHints()
   local parts
   if root == WorldMapFrame then
     local onPin = Nav.byDpad and Nav.cur and Nav.cur ~= WorldMapButton
-    parts = { K:format("A", onPin and "Select" or "Zoom In"), K:format("X", onPin and "Right-click" or "Zoom Out"),
-              K:format("D-pad", "Pins"),
-              K:format("B", (GetCurrentMapContinent() or 0) > 0 and "Back" or "Close") }
+    parts = { H("A", onPin and "Select" or "Zoom In"), H("X", onPin and "Right-click" or "Zoom Out"),
+              H("D-pad", "Pins"),
+              H("B", (GetCurrentMapContinent() or 0) > 0 and "Back" or "Close") }
   elseif root == MerchantFrame then
     -- Vendor: always show what X/Y do, so you know before hovering anything.
-    parts = { K:format("A", "Select"), K:format("X", "Buy"), K:format("Y", "Preview, hold: Compare"),
-              K:format("B", "Close") }
+    parts = { H("A", "Select"), H("X", "Buy"), H("Y", "Preview, hold: Compare"),
+              H("B", "Close") }
   elseif InBags(root) then
     -- Bags (default, bank, bag addons): X/Y/L3 always listed.
     local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
-    parts = { K:format("A", "Select"), K:format("X", vendorOpen and "Sell" or "Use"),
-              K:format("Y", "Preview, hold: Compare"), K:format("L3", "Item actions"), K:format("B", "Close") }
+    parts = { H("A", "Select"), H("X", vendorOpen and "Sell" or "Use"),
+              H("Y", "Preview, hold: Compare"), H("L3", "Item actions"), H("B", "Close") }
   elseif root == WP.Keyboard then
-    parts = { K:format("A", "Type"), K:format("X", "Capital"), K:format("Y", "Space"), K:format("B", "Delete"),
-              K:format("LB/RB", "Channel"), K:format("Start", "Send") }
+    if WP.Keyboard.IsField() then
+      parts = { H("A", "Type"), H("X", "Capital"), H("Y", "Space"),
+                H("B", "Delete (empty: close)"), H("Start", "Done") }
+    else
+      parts = { H("A", "Type"), H("X", "Capital"), H("Y", "Space"), H("B", "Delete"),
+                H("LB/RB", "Channel"), H("Start", "Send") }
+    end
   elseif root == LFDDungeonReadyDialog then
-    parts = { K:format("A", "Select"), K:format("B", "Leave Queue") }
+    parts = { H("A", "Select"), H("B", "Leave Queue") }
   elseif (root:GetName() or ""):find("^GroupLootFrame%d") then
-    parts = { K:format("A", "Roll"), K:format("Y", "Preview, hold: Compare"), K:format("B", "Pass") }
+    parts = { H("A", "Roll"), H("Y", "Preview, hold: Compare"), H("B", "Pass") }
+  elseif root:GetName() == "ImmersionFrame" then
+    if Nav.cur and Nav.cur == root.TalkBox then
+      parts = { H("A", "Continue / Accept"), H("X", "Skip / repeat text"), H("B", "Close") }
+    else
+      parts = { H("A", "Select"), H("B", "Close") }
+    end
   elseif root == QuestLogFrame then
-    parts = { K:format("A", "Select"), K:format("X", "Track / untrack"), K:format("B", "Close") }
+    parts = { H("A", "Select"), H("X", "Track / untrack"), H("B", "Close") }
   else
     -- Everything else: only what applies everywhere.
-    parts = { K:format("A", "Select"), K:format("B", "Close") }
+    parts = { H("A", "Select"), H("B", "Close") }
   end
   if #Nav.roots > 1 then
     local idx = 1
     for i, r in ipairs(Nav.roots) do if r == root then idx = i end end
-    parts[#parts + 1] = K:format("LB/RB", "Switch to " .. WindowName(Nav.roots[idx % #Nav.roots + 1]))
+    parts[#parts + 1] = H("LB/RB", "Swap window")
   end
-  hintText:SetText(table.concat(parts, "     "))
-  hints:SetWidth(hintText:GetStringWidth() + 24)
+  local flat = {}
+  for i, p in ipairs(parts) do flat[i] = K:format(WP.Keys(p.key), p.text) end
+  LayoutHints(parts)
+  hintText:SetText(table.concat(flat, "     "))
 
   -- Bounding box of the focused window (all bags together), in UIParent units.
   local uiScale = UIParent:GetEffectiveScale()
   local L, B, R, T
-  for _, f in ipairs(RootFrames(root)) do
+  local parts = (root:GetName() == "ImmersionFrame" and root.TalkBox) and ImmersionParts(root) or RootFrames(root)
+  for _, f in ipairs(parts) do
     local l, b, w, h = f:GetRect()
     if l then
       -- Blizzard panels are bigger than their artwork; trim the transparent
@@ -492,8 +534,8 @@ function Nav.UpdateHints()
 
   if #Nav.roots > 1 then
     focus:ClearAllPoints()
-    focus:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", L - 2, T + 2)
-    focus:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMLEFT", R + 2, B - 2)
+    focus:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", L - 6, T + 6)
+    focus:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMLEFT", R + 6, B - 6)
     focus:Show()
   else
     focus:Hide()
@@ -604,6 +646,11 @@ function Nav.Refresh()
     elseif rn == "WowPadFirstTime" then pref = { WowPadFirstTimeNext }
     elseif rn == "WowPadKeyboard" then pref = { WP.Keyboard.firstKey }
     elseif rn == "DGossipFrame" then pref = { _G.DGossipTitleButton1 }
+    elseif rn == "OpenMailFrame" then    -- the attachment, else the money, else Reply
+      pref = { _G.OpenMailAttachmentButton1, _G.OpenMailMoneyButton, _G.OpenMailLetterButton, _G.OpenMailReplyButton }
+    elseif rn == "ImmersionFrame" then   -- first option, else the talk box (continue / accept)
+      local t = Nav.root.TitleButtons
+      pref = { t and t.Buttons and t.Buttons[1], Nav.root.TalkBox }
     elseif rn == "DQuestFrame" then
       pref = { _G.DQuestFrameAcceptButton, _G.DQuestFrameCompleteButton, _G.DQuestFrameCompleteQuestButton }
     elseif rn == "LFDDungeonReadyDialog" then pref = { FindButton(Nav.root, "EnterDungeonButton", ENTER_DUNGEON) }
@@ -650,41 +697,78 @@ end
 
 -- D-pad up/down at the edge of a list: scroll the list one row instead of
 -- leaving it (auction house, professions, quest log...). Returns true if it did.
-local function TryScroll(cur, nxt, dy)
-  if dy == 0 or not Nav.scrolls then return false end
+-- The list the selected row belongs to, as (scroll bar, inList(node)):
+--  1. a scroll frame the row sits inside (most lists), or
+--  2. Blizzard's "faux" lists (auction house): the rows sit beside their scroll
+--     frame, so take the nearest scroll bar to the row's right, at its height.
+-- Only when the D-pad would otherwise leave the list (nxt isn't in it).
+local function ListOf(cur, nxt)
   for _, sf in ipairs(Nav.scrolls) do
     if CenterIn(cur, sf) and not (nxt and CenterIn(nxt, sf)) then
       local bar = ScrollBarOf(sf)
-      if bar then
-        local lo, hi = bar:GetMinMaxValues()
-        local v = bar:GetValue()
-        local step = math.max(cur:GetHeight() or 16, 8)
-        local nv = v - dy * step               -- D-pad down (dy = -1) = scroll down
-        nv = math.max(lo, math.min(hi, nv))
-        if math.abs(nv - v) > 0.5 then
-          local x, y = Center(cur)
-          bar:SetValue(nv)
-          -- Stay on the same screen row: same button for Blizzard's row
-          -- lists, the next item for lists that really move.
-          Nav.Refresh()
-          local best, bd
-          for _, n in ipairs(Nav.nodes) do
-            local nx, ny = Center(n)
-            if nx and CenterIn(n, sf) then
-              local d = (nx - x) ^ 2 + (ny - y) ^ 2
-              if not bd or d < bd then best, bd = n, d end
-            end
-          end
-          if best then
-            if best == Nav.cur then CallScript(best, "OnLeave"); Nav.cur = nil end
-            Nav.Select(best)                    -- re-select: refreshes the tooltip
-          end
-          return true
-        end
-      end
+      if bar then return bar, function(n) return CenterIn(n, sf) end end
     end
   end
-  return false
+  local x, y = Center(cur)
+  if not x then return nil end
+  -- The row's right end (an auction icon: its whole row) must sit right next
+  -- to the bar, so a list without a scroll bar of its own (the auction
+  -- categories) never scrolls the list beside it.
+  local row = cur.GetParent and cur:GetParent()
+  local _, _, rowRight = Rect((row and AuctionRow(row)) and row or cur)
+  if not rowRight then return nil end
+  local best, bestD, bestRect
+  for _, sf in ipairs(Nav.scrolls) do
+    local bar = ScrollBarOf(sf)
+    local L, B, R, T
+    if bar then L, B, R, T = Rect(bar) end
+    if L and y >= B - 2 and y <= T + 2 and L >= x and L - rowRight <= 40
+       and (not bestD or L - x < bestD) then
+      best, bestD, bestRect = bar, L - x, { L, B, T }
+    end
+  end
+  if not best then return nil end
+  local L, B, T = bestRect[1], bestRect[2], bestRect[3]
+  local function inList(n)
+    local nx, ny = Center(n)
+    return nx and nx < L and ny >= B - 2 and ny <= T + 2
+  end
+  if nxt and inList(nxt) then return nil end
+  return best, inList
+end
+
+-- D-pad up/down at the edge of a list: scroll the list one row instead of
+-- leaving it (auction house, professions, quest log...). Returns true if it did.
+local function TryScroll(cur, nxt, dy)
+  if dy == 0 or not Nav.scrolls then return false end
+  local bar, inList = ListOf(cur, nxt)
+  if not bar then return false end
+  local lo, hi = bar:GetMinMaxValues()
+  local v = bar:GetValue()
+  -- One row: an auction icon steps by its row's height (the list counts rows).
+  local row = cur.GetParent and cur:GetParent()
+  local step = math.max(((row and AuctionRow(row)) and row:GetHeight()) or cur:GetHeight() or 16, 8)
+  local nv = v - dy * step               -- D-pad down (dy = -1) = scroll down
+  nv = math.max(lo, math.min(hi, nv))
+  if math.abs(nv - v) <= 0.5 then return false end
+  local x, y = Center(cur)
+  bar:SetValue(nv)
+  -- Stay on the same screen row: same button for Blizzard's row lists, the
+  -- next item for lists that really move.
+  Nav.Refresh()
+  local best, bd
+  for _, n in ipairs(Nav.nodes) do
+    local nx, ny = Center(n)
+    if nx and inList(n) then
+      local d = (nx - x) ^ 2 + (ny - y) ^ 2
+      if not bd or d < bd then best, bd = n, d end
+    end
+  end
+  if best then
+    if best == Nav.cur then CallScript(best, "OnLeave"); Nav.cur = nil end
+    Nav.Select(best)                    -- re-select: refreshes the tooltip
+  end
+  return true
 end
 
 function Nav.Move(dx, dy)
@@ -757,6 +841,12 @@ function Nav.BackTarget()
         local b = _G[n]
         if b and b:IsVisible() then return b end
       end
+    end
+    -- Immersion: B = its close button (in the talk box).
+    if name == "ImmersionFrame" then
+      local mf = root.TalkBox and root.TalkBox.MainFrame
+      local cb = mf and rawget(mf, "CloseButton")
+      if cb and cb:IsVisible() then return cb end
     end
     -- Dungeon ready: B = Leave Queue. Loot roll: B = Pass.
     local special = (name == "LFDDungeonReadyDialog" and FindButton(root, "LeaveButton", LEAVE_QUEUE))
@@ -875,8 +965,9 @@ table.insert(WP.setupHooks, function()
         self:SetAttribute("clickbutton", nil)
         return
       end
+      -- Text field: the on-screen keyboard types into it (option off: focus it).
       if n and n:GetObjectType() == "EditBox" then
-        n:SetFocus()
+        if not (WP.OpenKeyboardFor and WP.OpenKeyboardFor(n)) then n:SetFocus() end
         n = nil
       end
       self:SetAttribute("clickbutton", n)

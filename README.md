@@ -1,4 +1,4 @@
-# <h1 align="center">WowPad 1.4.0</h1>
+# <h1 align="center">WowPad 1.4.1</h1>
 
 
 
@@ -35,12 +35,13 @@ these addons have been either fixed to work or were working by default:
 - Bagnon
 - DialogUI
 - DragonUI and DragonUI New Era (with !!!ClassicAPI)
+- Immersion
 - Postal
 - Questie-335
 
 ## Download
 
-Get **WowPad-1.4.0.zip** from the
+Get **WowPad-1.4.1.zip** from the
 [Releases page](https://github.com/Oddity-git/WoW-Pad/releases) (not the green
 "Code" button: that is the source code). Unzip it and follow **Install** below.
 
@@ -97,7 +98,7 @@ that contains `Wow.exe`.
    happening again. Scan results: [VirusTotal](https://www.virustotal.com/gui/file/bf24eb36348f25fd63cd9022f1059013810329307207b0106cb7827f7964e258). Its SHA-256 is
    `bf24eb36348f25fd63cd9022f1059013810329307207b0106cb7827f7964e258`, so you can check yours is the original.
 4. **Start the game.** A `wowpad.log` appears next to `Wow.exe`; its first
-   line says `wowpad 1.4.0 loaded`.
+   line says `wowpad 1.4.0 loaded` (the DLL is unchanged in 1.4.1).
 
 **Updating from an older version?** Replace `version.dll` and the whole
 `WowPad` folder, then restart the game fully (a `/reload` doesn't pick up new
@@ -149,6 +150,10 @@ Interface/AddOns/WowPad/   (or interface/addons/WowPad on Linux)
 
 Mouse or keyboard input switches back to normal desktop control at once;
 any controller input switches to controller mode.
+
+**PlayStation pad?** Pick PlayStation buttons in the setup window or Options >
+Buttons: hints and the bar then show ✕ ○ □ △, L1 / R1, L2 / R2, Share and
+Options instead of the Xbox names.
 
 ### In menus (a window open, out of combat)
 
@@ -242,6 +247,7 @@ Eight spells, items or macros on one button. Options > WowPad > Bars >
 in the LT, RT or LT+RT set), then **Apply**. Fill its eight wedges in **Edit bar layout** (the ring shows in
 the middle of the screen). In game: hold the button, point the right stick at a
 wedge, let go to use it. Let go in the middle to cancel. Works in combat.
+In Edit bar layout, drag its centre to move it and use the mouse wheel there to resize it.
 
 ### Lite bar
 <img width="1895" height="1079" alt="image" src="https://github.com/user-attachments/assets/b9b9dc7b-65a9-4c52-8cfb-81b2465a9d1c" />
@@ -255,7 +261,8 @@ RT / LT+RT) pick which set you're filling.
 ### Radial menu (Start)
 <img width="1913" height="1075" alt="image" src="https://github.com/user-attachments/assets/d7ccb686-51ae-4688-9ced-95b79016fdbc" />
 A radial wheel with three pages (LB / RB). Point the right stick at a wedge
-and press A; B or Start closes it.
+and press A; B or Start closes it. In **Edit bar layout** it shows in a blue
+box: drag it to move it, mouse wheel to resize.
 
 ### X = interact
 
@@ -288,7 +295,7 @@ need **Apply** (reloads the UI).
   Keep **crosshair tooltips on**: turning it off is experimental, the camera
   can jump after closing a window.
 - **Buttons:** X also starts auto attack; swap LB / RB targeting; healer mode;
-  on-screen keyboard.
+  PlayStation button labels; on-screen keyboard.
 - **Messages:** status line, debug messages.
 - **Experimental:** walk/run by stick tilt, smooth camera (glides the camera;
   `[Camera] SmoothMs` in `wowpad.ini` sets how much).
@@ -329,14 +336,12 @@ Chat commands: `/wp firsttime`, `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp
 - **Crosshair stuck somewhere other than its usual spot:** press R3 twice
   (pointer mode on, then off). That puts it back.
 - **Steam Deck (or another low resolution) with UI scale maxed: the radial menu
-  goes partly off the right edge:** turn off UI scaling (Esc > Video) until
-  this is fixed.
+  goes partly off the edge:** make it smaller or move it in **Edit bar layout**.
 - **Stuck input / something odd:** hold Back + Start for 1 second (kill
   switch), or touch the mouse/keyboard.
 
 
 ## Planned / TODO
-- radial menu customization, currently on steam deck if you max out UI scale the radial goes off screen a bit
 - Turning crosshair tooltips (peek) off without the camera jumping after
   closing a window.
 - Assigning action bar slots with the controller (picking from the

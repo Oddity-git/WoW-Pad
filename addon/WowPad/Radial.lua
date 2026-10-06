@@ -51,6 +51,22 @@ R:Hide()
 WP.Radial = R
 table.insert(WP.overlays, R)
 
+-- Edit bar layout: the wheel shows with a mover box (drag to move, mouse
+-- wheel to resize; Snap.lua). Saved in WowPadDB.movers.radial.
+WP.MakeMover(R, "radial", "Main menu")
+local shownForEdit = false
+function WP.RadialSetEditing(on)
+  if InCombatLockdown() then return end
+  if on then
+    if not R:IsShown() then R:Show(); shownForEdit = true end
+    R.mover:Show()
+  else
+    R.mover:Hide()
+    if shownForEdit then R:Hide(); shownForEdit = false end
+  end
+end
+table.insert(WP.setupHooks, function() WP.ApplyMoverPos(R) end)
+
 -- Wheel art (WowPad's own, scripts/make_radial_art.py): translucent wedges,
 -- bronze frame. One quarter frame and two wedge shapes, turned into place in
 -- 90 degree steps with SetTexCoord.
@@ -64,7 +80,9 @@ local function Turn(tex, k) tex:SetTexCoord(unpack(ROT[k % 4])) end
 
 -- Shared wheel art: also used by the utility ring (ActionBar.lua). Returns
 -- the hub frame and a Highlight(index or nil) function (1 = top, clockwise).
-local FILL, FILL_SEL, GLOW = { 0.04, 0.05, 0.08, 0.62 }, { 0.30, 0.24, 0.10, 0.78 }, { 1, 0.78, 0.25, 1 }
+-- Tile colours (art: scripts/make_radial_art.py): warm translucent dark
+-- brown, lighter on the selected tile, plus a soft gold glow inside its border.
+local FILL, FILL_SEL, GLOW = { 0.17, 0.085, 0.05, 0.82 }, { 0.30, 0.17, 0.07, 0.90 }, { 1, 0.78, 0.25, 0.75 }
 function WP.BuildWheelArt(parent, size)
   local hub = CreateFrame("Frame", nil, parent)
   hub:SetSize(size, size)
@@ -117,7 +135,7 @@ pageBar:SetPoint("TOP", title, "BOTTOM", 0, -6)
 local dots = {}
 local lbText = pageBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 local rbText = pageBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-lbText:SetText("LB"); rbText:SetText("RB")
+WP.KeyText(lbText, "LB"); WP.KeyText(rbText, "RB")
 local function LayoutDots(n)
   local gap = 14
   pageBar:SetWidth(n * gap)
@@ -135,9 +153,9 @@ local function LayoutDots(n)
   lbText:SetPoint("RIGHT", pageBar, "LEFT", -6, 0)
   rbText:SetPoint("LEFT", pageBar, "RIGHT", 6, 0)
 end
-local hint = R:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-hint:SetPoint("BOTTOM", 0, 0)
-hint:SetText("A open    B close    LB/RB page")
+local hint = WP.NewKeyLine(R, "GameFontHighlightSmall", 18)   -- icons level with the words (Glyphs.lua)
+hint:SetPoint("BOTTOM", 0, 2)
+hint:SetParts({ { key = "A", text = "open" }, { key = "B", text = "close" }, { key = "LB/RB", text = "page" } }, 10)
 
 local wedges, page = {}, 1
 

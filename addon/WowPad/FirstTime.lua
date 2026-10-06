@@ -8,27 +8,20 @@ local WP = WowPad
 
 -- Newest first. Shown on the last page.
 local WHATS_NEW = {
+  { "1.4.1", {
+    "Xbox or PlayStation button icons (Options > Buttons, or page 1 here)",
+    "New radial look; move / resize both radials in Edit bar layout",
+    "Queued abilities (Heroic Strike, Auto Shot) glow on the bar; rounded selection boxes",
+  } },
   { "1.4.0", {
-    "On-screen keyboard for chat: Back + A (Say, Party, Guild, Raid, Reply with LB / RB)",
-    "Healer mode (Options > Buttons): pick party members with the ally bumper + right stick, in combat too",
-    "Utility ring: 8 spells/items on one button (Options > Bars), point the right stick, let go to use",
-    "Ground-targeted spells: A or the same button places them, B cancels",
-    "Quest log: X tracks / untracks a quest.  B leaves the Esc menu and option windows",
+    "On-screen keyboard: {Back} + {A} for chat, or {A} on a text field (search, mail)",
+    "Healer mode (Options > Buttons): ally bumper + right stick picks party members",
+    "Utility ring: 8 spells / items on one button (Options > Bars)",
+    "Ground-targeted spells: {A} or the same button places them, {B} cancels",
+    "Quest log: {X} tracks a quest.  {B} leaves the Esc menu and option windows",
+    "Works with Immersion; mailbox and auction house work with the D-pad",
   } },
-  { "1.3.1", {
-    "This setup window: checks your setup and shows what's new (/wp firsttime)",
-    "Works with DialogUI and DragonUI New Era windows",
-    "Windows another addon hides (transparent / off-screen) no longer take the selection",
-  } },
-  { "1.3.0", {
-    "Back + A / Back + B: send or close chat without a keyboard",
-    "Dungeon queue and loot rolls work with the D-pad (out of combat)",
-    "L3 in bags: Disenchant / Destroy / Cancel",
-    "D-pad scrolls long lists (professions, auction house, quest log)",
-    "Lite bar: one action set at a time (Options > Bars)",
-    "Windows remember your selection; option to swap LB/RB targeting",
-  } },
-}  -- newest first; keep about three versions so the page fits the window
+}  -- newest first; keep about two versions so the page fits the window
 
 local OK   = "|TInterface\\RaidFrame\\ReadyCheck-Ready:16|t "
 local WARN = "|TInterface\\RaidFrame\\ReadyCheck-Waiting:16|t "
@@ -36,7 +29,7 @@ local TIP  = "|TInterface\\GossipFrame\\ActiveQuestIcon:16|t "
 local Y    = "|cffffd100%s|r"
 
 local F = CreateFrame("Frame", "WowPadFirstTime", UIParent)
-F:SetSize(660, 500)
+F:SetSize(660, 560)   -- lines with button icons are taller
 F:SetPoint("CENTER", 0, 40)
 F:SetFrameStrata("DIALOG")
 F:EnableMouse(true)
@@ -55,12 +48,127 @@ title:SetPoint("TOP", 0, -22)
 local pageNum = F:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 pageNum:SetPoint("TOPRIGHT", -40, -26)
 
-local body = F:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-body:SetPoint("TOPLEFT", 30, -56)
-body:SetWidth(600)
-body:SetJustifyH("LEFT")
-body:SetJustifyV("TOP")
-body:SetSpacing(4)
+-- Page text is laid out line by line, piece by piece (words, button icons,
+-- check marks), each placed by its middle on the line, so icons sit level
+-- with the words (inline icons in one big text drift up / down and push lines
+-- apart). Long lines wrap at word boundaries. "body" only keeps the flat text.
+local BODY_W, LINE_H, BLANK_H, ICON = 600, 20, 10, 18
+local bodyFrame = CreateFrame("Frame", nil, F)
+bodyFrame:SetPoint("TOPLEFT", 30, -56)
+bodyFrame:SetSize(BODY_W, 1)
+local body = bodyFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+body:Hide()
+local meas = bodyFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+meas:Hide()
+local pool = { tex = {}, fs = {} }
+local used = { tex = 0, fs = 0 }
+
+local function Width(s) meas:SetText(s); return meas:GetStringWidth() or 0 end
+local function Visible(s) return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+-- Colour still open at the end of s (|cAARRGGBB ... |r), starting from c.
+local function ColorAfter(c, s)
+  for code in s:gmatch("|[cr]%x*") do
+    if code:sub(2, 2) == "r" then c = nil else c = code:sub(1, 10) end
+  end
+  return c
+end
+
+local function Place(kind, x, y, value)
+  used[kind] = used[kind] + 1
+  local r = pool[kind][used[kind]]
+  if not r then
+    if kind == "tex" then
+      r = bodyFrame:CreateTexture(nil, "OVERLAY"); r:SetSize(ICON, ICON)
+    else
+      r = bodyFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    end
+    pool[kind][used[kind]] = r
+  end
+  if kind == "tex" then r:SetTexture(value) else r:SetText(value) end
+  r:ClearAllPoints()
+  r:SetPoint("LEFT", bodyFrame, "TOPLEFT", x, y)
+  r:Show()
+end
+
+-- One source line -> pieces: { tex = path } or { text = "..." }.
+local function Pieces(line)
+  local out = {}
+  local function text(t)
+    if t == "" then return end
+    local last = out[#out]
+    if last and last.text then last.text = last.text .. t else out[#out + 1] = { text = t } end
+  end
+  local i = 1
+  while true do
+    local a, b, inner = line:find("|T(.-)|t", i)
+    local c, d, key = line:find("{(%a%w*)}", i)
+    if c and (not a or c < a) then
+      text(line:sub(i, c - 1))
+      for _, pc in ipairs(WP.KeyPieces(key)) do
+        if pc.tex then out[#out + 1] = pc else text(pc.text) end
+      end
+      i = d + 1
+    elseif a then
+      text(line:sub(i, a - 1))
+      out[#out + 1] = { tex = inner:match("^[^:]*") }
+      i = b + 1
+      if line:sub(i, i) == " " then text(" "); i = i + 1 end
+    else
+      text(line:sub(i)); break
+    end
+  end
+  return out
+end
+
+local function Layout(raw)
+  used.tex, used.fs = 0, 0
+  local y = 0
+  for line in (raw .. "\n"):gmatch("(.-)\n") do
+    if line:match("^%s*$") then
+      y = y + BLANK_H
+    else
+      local x, color, mid = 0, nil, -(y + LINE_H / 2)
+      local indent = Width(line:match("^%s*")) + 16   -- wrapped part: a bit further in
+      local function newRow() y = y + LINE_H; mid = -(y + LINE_H / 2); x = indent end
+      for _, pc in ipairs(Pieces(line)) do
+        if pc.tex then
+          if x + ICON > BODY_W then newRow() end
+          Place("tex", x, mid, pc.tex)
+          x = x + ICON + 1
+        else
+          local s = pc.text
+          while s ~= "" do
+            local w = Width(s)
+            if Visible(s):match("^%s*$") then
+              x = x + w; color = ColorAfter(color, s); break
+            end
+            local part = s
+            if x + w > BODY_W then
+              -- longest run of whole words that fits
+              part = ""
+              for word in s:gmatch("%s*%S+") do
+                if x + Width(part .. word) > BODY_W then break end
+                part = part .. word
+              end
+              if part == "" and x <= indent then part = s:match("^%s*%S+") end
+            end
+            if part ~= "" then
+              Place("fs", x, mid, (color or "") .. part)
+              x = x + Width(part)
+              color = ColorAfter(color, part)
+              s = s:sub(#part + 1)
+            end
+            if s ~= "" then newRow(); s = s:gsub("^%s+", "") end
+          end
+        end
+      end
+      y = y + LINE_H
+    end
+  end
+  for i = used.tex + 1, #pool.tex do pool.tex[i]:Hide() end
+  for i = used.fs + 1, #pool.fs do pool.fs[i]:Hide() end
+  bodyFrame:SetHeight(math.max(y, 1))
+end
 
 local close = CreateFrame("Button", "WowPadFirstTimeCloseButton", F, "UIPanelCloseButton")
 close:SetPoint("TOPRIGHT", -6, -6)
@@ -77,13 +185,18 @@ local nxt = Button("WowPadFirstTimeNext", "Next")
 nxt:SetPoint("BOTTOMRIGHT", -24, 20)
 local foot = F:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 foot:SetPoint("BOTTOM", 0, 26)
-foot:SetText("LB / RB: pages    B: close    /wp firsttime reopens this")
+WP.KeyText(foot, "{LB} / {RB}: pages    {B}: close    /wp firsttime reopens this", true)
 
 -- Page-specific action buttons (above Back/Next).
 local actCamera = Button("WowPadFirstTimeCamera", "Set camera following to Never", 230)
 local actEdit = Button("WowPadFirstTimeEdit", "Edit bar layout", 150)
 local actOptions = Button("WowPadFirstTimeOptions", "Open options", 150)
 actCamera:SetPoint("BOTTOMLEFT", 30, 56)
+-- Button style (asked once, here): Xbox or PlayStation names / icons.
+local actPS = Button("WowPadFirstTimePS", "PlayStation buttons", 150)
+local actXbox = Button("WowPadFirstTimeXbox", "Xbox buttons", 120)
+actPS:SetPoint("BOTTOMRIGHT", -30, 56)
+actXbox:SetPoint("RIGHT", actPS, "LEFT", -10, 0)
 actEdit:SetPoint("BOTTOMLEFT", 30, 56)
 actOptions:SetPoint("LEFT", actEdit, "RIGHT", 10, 0)
 
@@ -131,14 +244,21 @@ local function SetupText()
   local action = GetBindingAction(key)
   if action and action ~= "" then
     local nice = _G["BINDING_NAME_" .. action] or action
-    add(OK .. Y:format("X interacts using your " .. key .. " key") .. " (" .. nice .. ").")
-    add("     Interacting with what's in front of you (loot, NPCs, objects) needs the Awesome WotLK")
-    add("     client mod, with its interaction key bound to " .. key .. " (or another key you pick with /wp interact KEY).")
+    add(OK .. Y:format("{X} interacts using your " .. key .. " key") .. " (" .. nice .. ").")
+    add("     Interacting with what's in front of you (loot, NPCs, objects) needs the Awesome")
+    add("     WotLK client mod with its interaction key bound to " .. key .. ". Other key: /wp interact KEY")
   else
-    add(WARN .. Y:format("Nothing is bound to " .. key .. ", so X only attacks.") .. " For looting, talking to NPCs")
+    add(WARN .. Y:format("Nothing is bound to " .. key .. ", so {X} only attacks.") .. " For looting, talking to NPCs")
     add("     etc., install Awesome WotLK and bind its interaction key to " .. key .. " (see README),")
     add("     or use /wp interact KEY to follow another key.")
   end
+
+  if WP.ButtonStyle() == "ps" then
+    add(OK .. Y:format("Button labels: PlayStation") .. " ({A} {B} {X} {Y}, {LB} / {RB}, {LT} / {RT}).")
+  else
+    add(OK .. Y:format("Button labels: Xbox") .. " ({A} {B} {X} {Y}, {LB} / {RB}). Using a DualShock / DualSense?")
+  end
+  add("     Pick the button style below (also in Options > Buttons).")
 
   if GetCVar("cameraSmoothStyle") == "0" then
     add(OK .. Y:format("Camera following: Never.") .. " The right stick is in charge of the camera.")
@@ -163,25 +283,25 @@ local function WhatsNewText()
 end
 
 local PAGES = {
-  { title = "WowPad: setup check", text = SetupText, live = true, buttons = { actCamera } },
+  { title = "WowPad: setup check", text = SetupText, live = true, buttons = { actCamera, actXbox, actPS } },
   { title = "The basics", text = function() return table.concat({
       Y:format("Left stick") .. " moves,  " .. Y:format("right stick") .. " turns the camera (a dot marks the crosshair).",
-      Y:format("A") .. " jump,  " .. Y:format("B") .. " clear target / back,  " .. Y:format("X") .. " interact + attack,  "
-        .. Y:format("Y") .. " target menu.",
-      Y:format("D-pad") .. ": 4 action slots.  Hold " .. Y:format("LT") .. ", " .. Y:format("RT") .. " or "
+      Y:format("{A}") .. " jump,  " .. Y:format("{B}") .. " clear target / back,  " .. Y:format("{X}") .. " interact + attack,  "
+        .. Y:format("{Y}") .. " target menu.",
+      Y:format("D-pad") .. ": 4 action slots.  Hold " .. Y:format("{LT}") .. ", " .. Y:format("{RT}") .. " or "
         .. Y:format("both") .. " for 8 more slots each.",
-      Y:format("LB / RB") .. ": target nearest friend / enemy.  Hold both: right stick zooms.",
-      Y:format("Healer mode") .. " (off by default, Options > Buttons): tap your ally bumper ("
-        .. ((WowPadDB and WowPadDB.swapBumpers) and "RB" or "LB") .. ") for your last party pick,",
-      "hold it + flick the right stick down / up for the next / previous party member. Works in combat.",
-      Y:format("Start") .. ": close windows, radial main menu.  " .. Y:format("Back") .. ": map (hold: bags).",
-      Y:format("R3") .. ": pointer mode (RT / LT click).  " .. Y:format("L3") .. ": autorun.",
+      Y:format("{LB} / {RB}") .. ": target nearest friend / enemy.  Hold both: right stick zooms.",
+      Y:format("Healer mode") .. " (Options > Buttons): tap your ally bumper ("
+        .. ((WowPadDB and WowPadDB.swapBumpers) and "{RB}" or "{LB}") .. ") for your last party pick;",
+      "hold it + flick the right stick down / up for the next / previous member. Works in combat.",
+      Y:format("{Start}") .. ": close windows, radial main menu.  " .. Y:format("{Back}") .. ": map (hold: bags).",
+      Y:format("R3") .. ": pointer mode ({RT} / {LT} click).  " .. Y:format("L3") .. ": autorun.",
       " ",
-      "With a window open (out of combat) the D-pad moves a gold selection, A clicks, X right-clicks,",
-      "Y previews / compares gear, B closes, LB / RB switch windows. A hint bar shows what applies.",
+      "With a window open (out of combat) the D-pad moves a gold selection: {A} click,",
+      "{X} right-click, {Y} preview / compare, {B} close, {LB} / {RB} switch windows.",
       " ",
-      "Touching the mouse or keyboard switches back to normal control at once; the pad switches back.",
-      "Full button list: Start > page 2 > " .. Y:format("Controller") .. ".",
+      "Touching the mouse or keyboard switches to normal control at once; the pad switches back.",
+      "Full button list: {Start} > page 2 > " .. Y:format("Controller") .. ".",
     }, "\n") end },
   { title = "Make it yours", text = function() return table.concat({
       Y:format("Edit bar layout") .. " (left-click the minimap button): drag spells, items, macros and mounts",
@@ -191,7 +311,7 @@ local PAGES = {
       "  -  Camera sensitivity, pointer speed, invert camera, smooth camera",
       "  -  Walk on slight stick tilt, run on full tilt",
       "  -  Healer mode (off by default): pick party members with the bumper + right stick",
-      "  -  Swap LB / RB targeting,  X also starts attacking",
+      "  -  Swap {LB} / {RB} targeting,  {X} also starts attacking,  Xbox or PlayStation buttons",
       "  -  Crosshair dot and crosshair tooltips",
       " ",
       Y:format("Options > WowPad > Bars") .. ":",
@@ -202,15 +322,15 @@ local PAGES = {
       "  -  Minimap button",
     }, "\n") end, buttons = { actEdit, actOptions } },
   { title = "Good to know", text = function() return table.concat({
-      Y:format("Chat:") .. " Back + A opens the on-screen keyboard (A type, X capital, Y space, B delete,",
-      "LB / RB channel, Start or Back + A send). Back + B closes it. A real keyboard works as usual.",
+      Y:format("Chat:") .. " {Back} + {A} opens the on-screen keyboard: {A} type, {X} capital, {Y} space,",
+      "{B} delete, {LB} / {RB} channel, {Start} send, {Back} + {B} close. A real keyboard works too.",
       " ",
-      Y:format("Bags:") .. " L3 on an item: Disenchant / Destroy / Cancel.  Y: preview, hold to compare.",
-      Y:format("Ground spells") .. " (Blizzard, Flare...): A or the same button places them, B cancels.",
+      Y:format("Bags:") .. " L3 on an item: Disenchant / Destroy / Cancel.  {Y}: preview, hold to compare.",
+      Y:format("Ground spells") .. " (Blizzard, Flare...): {A} or the same button places them, {B} cancels.",
       "Let the camera come to rest before placing.",
       " ",
       Y:format("Crosshair stuck somewhere odd?") .. " Press R3 twice.",
-      Y:format("Something stuck?") .. " Hold Back + Start for 1 second (kill switch), or touch mouse / keyboard.",
+      Y:format("Something stuck?") .. " Hold {Back} + {Start} for 1 second (kill switch), or touch mouse / keyboard.",
       Y:format("Keep crosshair tooltips (peek) on:") .. " off is experimental and the camera can jump.",
       Y:format("Hand / sword cursor over the crosshair?") .. " Turn on Hardware Cursor (Esc > Video).",
       " ",
@@ -233,7 +353,7 @@ local COMMANDS = {
   { "/wp firsttime",    "this window" },
 }
 local cmdCol = F:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-cmdCol:SetPoint("TOPLEFT", body, "BOTTOMLEFT", 16, -6)
+cmdCol:SetPoint("TOPLEFT", bodyFrame, "BOTTOMLEFT", 16, -2)
 cmdCol:SetJustifyH("LEFT")
 cmdCol:SetSpacing(4)
 local descCol = F:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -248,13 +368,15 @@ do
 end
 
 local page = 1
-local ALL_ACTIONS = { actCamera, actEdit, actOptions }
+local ALL_ACTIONS = { actCamera, actEdit, actOptions, actXbox, actPS }
 
 local function Render()
   local p = PAGES[page]
   title:SetText(p.title)
   pageNum:SetText(page .. " / " .. #PAGES)
-  body:SetText(p.text())
+  local raw = p.text()
+  Layout(raw)                       -- {A}, {LB}... in the chosen button style
+  body:SetText(WP.Text(raw))        -- flat copy (not shown)
   if p.commands then cmdCol:Show(); descCol:Show() else cmdCol:Hide(); descCol:Hide() end
   for _, b in ipairs(ALL_ACTIONS) do b:Hide() end
   for _, b in ipairs(p.buttons or {}) do b:Show() end
@@ -275,6 +397,8 @@ actCamera:SetScript("OnClick", function()
   WP.Print("Camera following set to Never (Interface > Camera to change it back).")
   Render()
 end)
+actXbox:SetScript("OnClick", function() WP.SetButtonStyle("xbox"); Render() end)
+actPS:SetScript("OnClick", function() WP.SetButtonStyle("ps"); Render() end)
 actEdit:SetScript("OnClick", function() F:Hide(); if WP.ToggleEdit then WP.ToggleEdit() end end)
 actOptions:SetScript("OnClick", function() F:Hide(); if WP.OpenOptions then WP.OpenOptions() end end)
 

@@ -248,3 +248,37 @@ With a window open (no trigger held): **Y tap** previews the selected item in th
   watch on the selected quest (`Nav.TrackQuest`). Loot-roll hint includes Y (preview / compare).
 - **Leave Vehicle button** stays visible when Blizzard's bars are hidden (moved to UIParent).
 
+- **Keyboard in text fields:** A on an EditBox in a window calls `WP.OpenKeyboardFor` (Nav's A/X clicker)
+  instead of focusing it. Field mode types into the box as you go (`IsNumeric` boxes take digits only,
+  `GetMaxLetters` is respected); Start / Back + A sets the text and runs the box's OnEnterPressed; closing
+  without it (Esc) puts the old text back (OnHide). The chat line you had started is kept for later.
+- **Immersion:** `ImmersionFrame` is in `WP.EXTRA_WINDOWS`. It has no size of its own, so the selection box
+  and hint bar use its TalkBox and TitleButtons. Starts on the first option, else the TalkBox (A = left click:
+  continue / accept / complete, X = right click: skip / repeat text). B = TalkBox.MainFrame.CloseButton.
+- **Mailbox:** `OpenMailFrame` is its own window (in `WP.EXTRA_WINDOWS`), so opening a letter takes the
+  selection (attachment, money, letter, Reply).
+- **Auction house:** rows (Browse / Bid / Auctions buttons) aren't stops, only their `...Item` icons. The
+  listing rows sit beside their faux scroll frame, so TryScroll also accepts the nearest scroll bar right
+  beside the row (within 40 px of the row's right end, so the categories never scroll the listings). Money
+  displays (`*MoneyFrameGold/Silver/CopperButton`) and `BrowseBidPrice*` are never stops.
+- **Set outline:** `Textures/outline.tga` (scripts/make_outline.py), thinner than glow.tga; 45 % alpha on the
+  default set.
+
+## 1.4.1 notes (addon only; version.dll unchanged from 1.4.0)
+- **Set outline:** same strength on all four sets. It sits on its own holder frame (level +5) above the slot ring: textures in the same draw
+  layer have no fixed order, so the ring could cover it. Button icons / D-pad arrows sit at +6.
+- **Queued / auto-repeat glow:** the slot's CheckedTexture is the glow; `Bar.UpdateState` checks
+  `IsCurrentSpell` / `IsAutoRepeatSpell` on CURRENT_SPELL_CAST_CHANGED etc. (Heroic Strike, Auto Shot).
+- **Rounded corners:** selection box, window outline and edit-mode bar box use a tooltip-style rounded
+  backdrop border.
+- **Button styles (Glyphs.lua):** `WowPadDB.buttonStyle` = "xbox" / "ps". Face buttons are icons
+  (`Textures/btn_xb_*`, `btn_ps_*`, scripts/make_button_glyphs.py), the rest are names (L1/R1, L2/R2,
+  Share, Options). `WP.Keys("LB / RB")`, `WP.Text("press {A}")`, `WP.KeyText(fs, raw)` (relabels on style
+  change), `WP.KeysPlain` (dropdowns). Inline icons drift up / down differently per window, so hint bars,
+  the radial hint, the ground-target hint and the setup window lay text out piece by piece (icon / words,
+  each placed by its middle): `WP.NewKeyLine`, and FirstTime.lua's own wrapping layout.
+- **Radial art:** WoW Forever-style separate rounded tiles (scripts/make_radial_art.py), warm translucent
+  fill; shared by the main menu and the utility ring.
+- **Movable radials:** `WP.MakeMover(frame, key, label, size)` / `WP.ApplyMoverPos` (Snap.lua) save
+  `WowPadDB.movers[key] = {x, y, scale}`, clamped to the screen, mouse wheel 0.5-1.5. The main menu shows in
+  Edit bar layout with a full mover box; the ring gets a hub-only handle so its wedges still take drops.

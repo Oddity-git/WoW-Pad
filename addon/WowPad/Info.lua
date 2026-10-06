@@ -49,12 +49,15 @@ title:SetText("Controller Map")
 local valueText, keyText = {}, {}
 local function Column(list, x)
   for i, row in ipairs(list) do
+    -- Both texts are placed by their middle on the row, so a key with
+    -- button icons (which draw high) can be nudged back in line.
+    local y = -64 - (i - 1) * 26
     local k = F:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    k:SetPoint("TOPLEFT", x, -56 - (i - 1) * 26)
-    k:SetText(row[1])
+    WP.KeyText(k, row[1])           -- button names in the chosen style
+    k:SetPoint("LEFT", F, "TOPLEFT", x, y + WP.IconNudge(k:GetText()))
     keyText[row[1]] = k
     local v = F:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    v:SetPoint("TOPLEFT", x + 100, -56 - (i - 1) * 26)
+    v:SetPoint("LEFT", F, "TOPLEFT", x + 100, y)
     v:SetText(row[2])
     valueText[row[1]] = v
   end
@@ -64,7 +67,7 @@ Column(RIGHT, 290)
 
 local foot = F:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 foot:SetPoint("BOTTOM", 0, 18)
-foot:SetText("Reopen from Start > page 2 > Controller.   B to close.")
+WP.KeyText(foot, "Reopen from {Start} > page 2 > Controller.   {B} to close.", true)
 
 local close = CreateFrame("Button", "WowPadInfoCloseButton", F, "UIPanelCloseButton")
 close:SetPoint("TOPRIGHT", -6, -6)
@@ -74,7 +77,7 @@ function WP.ShowInfo()
   local swap = WowPadDB and WowPadDB.swapBumpers
   if valueText.LB then valueText.LB:SetText(swap and "Target hostile" or "Target friendly") end
   if valueText.RB then valueText.RB:SetText(swap and "Target friendly" or "Target hostile") end
-  if keyText["LB + R stick"] then keyText["LB + R stick"]:SetText(swap and "RB + R stick" or "LB + R stick") end
+  if keyText["LB + R stick"] then WP.KeyText(keyText["LB + R stick"], swap and "RB + R stick" or "LB + R stick") end
   local healer = WowPadDB and WowPadDB.wpBumperFlick == true
   local ally = swap and valueText.RB or valueText.LB
   if ally and healer then ally:SetText("Target last party pick") end

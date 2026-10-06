@@ -1,4 +1,5 @@
--- Keyboard.lua - a simple on-screen keyboard above the chat window.
+-- Keyboard.lua - a simple on-screen keyboard above the chat window, also used
+-- for text fields (auction house search, mail, ...).
 --
 -- WoW's chat box takes every key while it has focus, so the pad can't drive
 -- it. Instead you type into this keyboard and WowPad hands the finished line
@@ -9,6 +10,11 @@
 -- the other menus. Navigated by Nav.lua like any window:
 --   D-pad: move   A: type   X: type as capital   Y: space   B: delete (empty: close)
 --   LB / RB: channel   Start or Back + A: send   Back + B: close
+--
+-- Text fields: A on a field in a window opens the keyboard under it (WP.OpenKeyboardFor).
+-- What you type goes into the field as you type; Start / Back + A = Enter in
+-- that field (the auction house searches), B on an empty line closes. Number
+-- fields only take digits.
 
 local WP = WowPad
 
@@ -36,6 +42,7 @@ local K      -- the keyboard frame: built on first use only (Build below)
 local line   -- its text line
 local M = {} -- its functions, copied onto the frame when it's built
 local text, shift, chan = "", false, 1
+local field, fieldOrig, fieldDone, chatText   -- text-field mode (nil = chat)
 
 local function Channel()
   local c = CHANNELS[chan]
@@ -49,6 +56,10 @@ end
 
 local keys = {}
 local function Redraw()
+  if field then
+    local shown = #text > 48 and ("..." .. text:sub(-45)) or text
+    line:SetText("|cffffd100>|r " .. shown .. "|cffffd100_|r")
+  else
   local c, target = Channel()
   local info = ChatTypeInfo and ChatTypeInfo[c.type]
   local col = info and ("|cff%02x%02x%02x"):format(info.r * 255, info.g * 255, info.b * 255) or "|cffffffff"
@@ -56,6 +67,7 @@ local function Redraw()
   -- Show the end of long lines.
   local shown = #text > 48 and ("..." .. text:sub(-45)) or text
   line:SetText(col .. "[" .. label .. "]|r " .. shown .. "|cffffd100_|r")
+  end
   for _, b in ipairs(keys) do
     if b.char then
       local ch = b.char
@@ -66,22 +78,39 @@ local function Redraw()
   if K.shiftKey then K.shiftKey:SetText(shift and "|cffffd100SHIFT|r" or "Shift") end
 end
 
-local function Type(ch, capital)
-  if #text >= MAXLEN then return end
-  if capital or shift then ch = SHIFTED[ch] or ch:upper() end
-  text = text .. ch
-  shift = false
+-- Longest line: the field's own limit in field mode.
+local function MaxLen()
+  local m = field and field.GetMaxLetters and field:GetMaxLetters() or 0
+  return (m and m > 0) and math.min(m, MAXLEN) or MAXLEN
+end
+-- Field mode: the field shows what you type straight away.
+local function Changed()
+  if field then field:SetText(text) end
   Redraw()
 end
 
-function M.Space() if #text < MAXLEN then text = text .. " "; Redraw() end end
-function M.Delete()
-  if text == "" then K:Hide() return end
-  text = text:sub(1, -2)
-  Redraw()
+local function Type(ch, capital)
+  if #text >= MaxLen() then return end
+  if capital or shift then ch = SHIFTED[ch] or ch:upper() end
+  if field and field.IsNumeric and field:IsNumeric() and not ch:find("^%d$") then return end
+  text = text .. ch
+  shift = false
+  Changed()
 end
+
+function M.Space()
+  if field and field.IsNumeric and field:IsNumeric() then return end
+  if #text < MaxLen() then text = text .. " "; Changed() end
+end
+function M.Delete()
+  if text == "" then fieldDone = true; K:Hide() return end
+  text = text:sub(1, -2)
+  Changed()
+end
+function M.IsField() return field ~= nil end
 -- LB / RB: next / previous channel (Reply only when someone has whispered you).
 function M.Page(step)
+  if field then return end
   for _ = 1, #CHANNELS do
     chan = (chan - 1 + step) % #CHANNELS + 1
     local c, target = Channel()
@@ -93,6 +122,15 @@ end
 -- Hand the line to the chat box and send it: it handles channels, whisper
 -- targets and slash commands exactly as if you had typed it.
 function M.Send()
+  if field then                          -- text field: Enter in that field
+    local f = field
+    f:SetText(text)
+    fieldDone = true
+    K:Hide()
+    local onEnter = f:GetScript("OnEnterPressed")
+    if onEnter then onEnter(f) end
+    return
+  end
   local msg = text:gsub("^%s+", ""):gsub("%s+$", "")
   if msg == "" then K:Hide() return end
   local c, target = Channel()
@@ -129,6 +167,15 @@ local function Build()
   K:Hide()
   table.insert(WP.overlays, K)
   tinsert(UISpecialFrames, "WowPadKeyboard")   -- Esc (Back + B) closes it
+  -- Leaving field mode: closed without Start (Esc) puts the field back as it
+  -- was; the chat line you had started comes back.
+  K:SetScript("OnHide", function()
+    if not field then return end
+    if not fieldDone then field:SetText(fieldOrig or "") end
+    field, fieldOrig = nil, nil
+    text, shift = chatText or "", false
+    chatText = nil
+  end)
 
   -- Version label above the top-right corner.
   local ver = K:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -192,6 +239,21 @@ function M.Open(initial)
   K:Show()
 end
 
+-- Text field (A on a field in a window): type into it, Start = Enter there.
+function M.OpenFor(eb)
+  if InCombatLockdown() then return end
+  Build()
+  if K:IsShown() then fieldDone = true; K:Hide() end   -- leave whatever was open
+  chatText = text
+  field, fieldOrig, fieldDone = eb, eb:GetText() or "", false
+  text, shift = fieldOrig, false
+  if eb.ClearFocus then eb:ClearFocus() end
+  K:ClearAllPoints()
+  K:SetPoint("TOPLEFT", eb, "BOTTOMLEFT", -8, -6)
+  Redraw()
+  K:Show()
+end
+
 -- The keyboard stays open when you use the mouse or a touchpad (Steam Deck):
 -- its keys are ordinary buttons you can click (right-click = capital).
 
@@ -229,6 +291,12 @@ ev:SetScript("OnEvent", function()
 end)
 
 -- For other parts of WowPad (and tests): open the keyboard if it's enabled.
+function WP.OpenKeyboardFor(eb)
+  if WowPadDB and WowPadDB.keyboard == false then return false end
+  M.OpenFor(eb)
+  return true
+end
+
 function WP.OpenKeyboard(initial)
   if WowPadDB and WowPadDB.keyboard == false then return end
   M.Open(initial)

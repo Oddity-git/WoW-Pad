@@ -41,7 +41,7 @@ local TEX = "Interface\\AddOns\\WowPad\\Textures\\"  -- ring / glow / disc (roun
 local function RoundIcon(tex, path)
   if path then SetPortraitToTexture(tex, path) else tex:SetTexture(nil) end
 end
-local FACE_LABEL = { [5] = "|cff55dd55A|r", [6] = "|cffff5555B|r", [7] = "|cff5599ffX|r", [8] = "|cffffdd33Y|r" }
+local FACE_KEY = { [5] = "A", [6] = "B", [7] = "X", [8] = "Y" }   -- icon in the chosen style (Glyphs.lua)
 -- One arrow (Textures/dpadarrow, points up) turned per direction with SetTexCoord.
 local DPAD_ARROW = {
   [1] = { 0, 0, 0, 1, 1, 0, 1, 1 },   -- up
@@ -125,14 +125,10 @@ local function UpdateButton(btn)
   Shown(btn.empty, icon == nil)
   if btn.glyph then
     btn.glyph:ClearAllPoints()
-    -- like the A/B/X/Y letters: small in the bottom-right corner over a skill,
-    -- big in the middle of an empty slot
-    if icon then btn.glyph:SetSize(12, 12); btn.glyph:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
-    else btn.glyph:SetSize(18, 18); btn.glyph:SetPoint("CENTER", btn, "CENTER") end
-  end
-  if btn.letter then
-    btn.letter:ClearAllPoints()
-    if icon then btn.letter:SetPoint("BOTTOMRIGHT", -1, 1) else btn.letter:SetPoint("CENTER") end
+    -- small in the bottom-right corner over a skill, big in the middle of an
+    -- empty slot
+    if icon then btn.glyph:SetSize(16, 16); btn.glyph:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 2, -2)
+    else btn.glyph:SetSize(20, 20); btn.glyph:SetPoint("CENTER", btn, "CENTER") end
   end
 
   -- cooldown
@@ -152,9 +148,18 @@ local function UpdateButton(btn)
   Bar.UpdateUsable(btn)
 end
 
+-- Lit while the slot's spell waits for your next swing (Heroic Strike, Raptor
+-- Strike, Maul...) or repeats (Auto Shot, Shoot), like Blizzard's buttons.
+function Bar.UpdateState(btn)
+  local spell = SlotSpell(btn.data)
+  local on = spell and ((IsCurrentSpell and IsCurrentSpell(spell)) or (IsAutoRepeatSpell and IsAutoRepeatSpell(spell)))
+  btn:SetChecked(on and true or false)
+end
+
 function Bar.UpdateUsable(btn)
   local d = btn.data
-  if not d then return end
+  if not d then btn:SetChecked(false) return end
+  Bar.UpdateState(btn)
   local spell, item = SlotSpell(d), SlotItem(d)
   local usable, noMana, inRange = true, false, nil
   if spell then
@@ -175,6 +180,17 @@ function Bar.UpdateUsable(btn)
   end
 end
 
+-- Button style changed (Glyphs.lua): face icons on the bar.
+table.insert(WP.styleHooks, function()
+  for _, btn in pairs(slots) do
+    if btn.faceKey then btn.glyph:SetTexture(WP.FaceTexture(btn.faceKey)) end
+  end
+  for _, f in pairs(Bar.fixedFrames or {}) do
+    if f.faceKey then f.glyph:SetTexture(WP.FaceTexture(f.faceKey)) end
+  end
+  Bar.HighlightSet(WP.set)   -- lite badge text
+end)
+
 function Bar.UpdateAll()
   for _, btn in pairs(slots) do UpdateButton(btn) end
 end
@@ -188,7 +204,7 @@ function Bar.HighlightSet(set)
   if Bar.badge then
     local lite = WowPadDB and WowPadDB.barLite
     local name = set and set > 0 and ({ "LT", "RT", "LT+RT" })[set]
-    if lite and name then Bar.badge:SetText(name); Bar.badge:Show() else Bar.badge:Hide() end
+    if lite and name then Bar.badge:SetText(WP.Keys(name)); Bar.badge:Show() else Bar.badge:Hide() end
   end
 end
 
@@ -399,6 +415,7 @@ function Bar.SetEditing(on)
   if not on and WP.header then WP.header:SetAttribute("liteview", 0) end
   WP.header:SetAttribute("editing", on and 1 or 0) -- keeps the bar visible in desktop mode
   if WP.Extra then WP.Extra.SetEditing(on) end     -- XP and pet bar movers
+  if WP.RadialSetEditing then WP.RadialSetEditing(on) end   -- main menu wheel mover (Radial.lua)
   UpdateTabs()
   if on then
     WP.Print("Edit mode: drag spells, items or macros onto slots; drag the bar to move it; "
@@ -430,10 +447,17 @@ local function MakeCluster(set)
   return c
 end
 
--- Gold outline shown on every button of the set you're holding.
+-- Gold outline shown on every button of the set you're holding: a thin ring
+-- (Textures/outline.tga, scripts/make_outline.py), the same for all four sets.
+-- It lives on its own frame above the button: in the button's own OVERLAY
+-- layer the slot ring could end up drawn on top of it (the order of textures
+-- in one layer isn't fixed), hiding all but a 1-pixel sliver.
 local function AddOutline(parent, set)
-  local o = parent:CreateTexture(nil, "OVERLAY")
-  o:SetTexture(TEX .. "glow")
+  local holder = CreateFrame("Frame", nil, parent)
+  holder:SetAllPoints()
+  holder:SetFrameLevel(parent:GetFrameLevel() + 5)
+  local o = holder:CreateTexture(nil, "OVERLAY")
+  o:SetTexture(TEX .. "outline")
   o:SetBlendMode("ADD")
   o:SetSize(SIZE * 1.15, SIZE * 1.15)   -- hugs the ring
   o:SetPoint("CENTER")
@@ -502,9 +526,14 @@ local function MakeFixed(c, i)
   ring:SetTexture(TEX .. "ring")
   ring:SetSize(SIZE * 1.12, SIZE * 1.12)
   ring:SetPoint("CENTER")
-  local label = f:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-  label:SetPoint("BOTTOMRIGHT", -1, 1)
-  label:SetText(FACE_LABEL[i])
+  local gf = CreateFrame("Frame", nil, f)
+  gf:SetAllPoints()
+  gf:SetFrameLevel(f:GetFrameLevel() + 6)   -- above the set outline (+5)
+  f.glyph = gf:CreateTexture(nil, "OVERLAY")
+  f.glyph:SetSize(16, 16)
+  f.glyph:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 2, -2)
+  f.faceKey = FACE_KEY[i]
+  f.glyph:SetTexture(WP.FaceTexture(f.faceKey))
   AddOutline(f, 0)
   f.fixed = FIXED[i][2]
   f.icon = tex
@@ -537,6 +566,9 @@ local function MakeSlot(c, set, i, opts)
   ring:SetSize(SIZE * 1.12, SIZE * 1.12)
   ring:SetPoint("CENTER")
   btn:SetHighlightTexture(TEX .. "glow", "ADD")
+  -- Checked = queued / repeating (Heroic Strike, Raptor Strike, Auto Shot...): gold glow.
+  btn:SetCheckedTexture(TEX .. "glow")
+  if btn.GetCheckedTexture and btn:GetCheckedTexture() then btn:GetCheckedTexture():SetBlendMode("ADD") end
   -- The cooldown sweep is always square in 3.3.5: inset it so the ring hides the corners.
   btn.cooldown:ClearAllPoints()
   btn.cooldown:SetPoint("TOPLEFT", 3, -3)
@@ -549,13 +581,18 @@ local function MakeSlot(c, set, i, opts)
     -- on its own child frame so it always draws above the ring and cooldown
     local gf = CreateFrame("Frame", nil, btn)
     gf:SetAllPoints()
-    gf:SetFrameLevel(btn:GetFrameLevel() + 4)
+    gf:SetFrameLevel(btn:GetFrameLevel() + 6)   -- above the set outline (+5)
     btn.glyph = gf:CreateTexture(nil, "OVERLAY")
     btn.glyph:SetTexture(TEX .. "dpadarrow")
     btn.glyph:SetTexCoord(unpack(DPAD_ARROW[i]))
   else
-    btn.letter = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-    btn.letter:SetText(FACE_LABEL[i])
+    -- face button: its icon (Xbox or PlayStation), placed like the D-pad arrows
+    local gf = CreateFrame("Frame", nil, btn)
+    gf:SetAllPoints()
+    gf:SetFrameLevel(btn:GetFrameLevel() + 6)   -- above the set outline (+5)
+    btn.glyph = gf:CreateTexture(nil, "OVERLAY")
+    btn.faceKey = FACE_KEY[i]
+    btn.glyph:SetTexture(WP.FaceTexture(btn.faceKey))
   end
   btn.empty = btn:CreateTexture(nil, "BACKGROUND")
   btn.empty:SetTexture(TEX .. "disc")
@@ -570,7 +607,7 @@ local function MakeSlot(c, set, i, opts)
     if not InCombatLockdown() and GetCursorInfo() then self:SetAttribute("type", nil) end
   end)
   btn:SetScript("PostClick", function(self, mouse)
-    self:SetChecked(false)
+    Bar.UpdateState(self)                          -- clicking a CheckButton toggles it; show the real state
     if not Bar.editing then Bar.Press(self) end   -- press feedback (before the combat return)
     if InCombatLockdown() then return end
     if GetCursorInfo() then OnReceiveDrag(self)
@@ -591,10 +628,16 @@ table.insert(WP.setupHooks, function()
   bar:SetScript("OnMouseWheel", function(_, delta)
     if Bar.editing then Bar.SetScale((Bar.Pos().scale or 1) + delta * 0.05) end   -- lite has its own size
   end)
-  bar.editBg = bar:CreateTexture(nil, "BACKGROUND")
-  bar.editBg:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-  bar.editBg:SetVertexColor(0.2, 0.5, 1, 0.25)
+  -- Edit mode: a blue box with rounded corners behind the bar.
+  bar.editBg = CreateFrame("Frame", nil, bar)
   bar.editBg:SetAllPoints()
+  bar.editBg:SetFrameLevel(math.max(bar:GetFrameLevel() - 1, 0))
+  bar.editBg:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                           edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                           tile = true, tileSize = 16, edgeSize = 18,
+                           insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+  bar.editBg:SetBackdropColor(0.2, 0.5, 1, 0.25)
+  bar.editBg:SetBackdropBorderColor(0.35, 0.7, 1, 0.7)
   bar.editBg:Hide()
   editHelp = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   editHelp:SetPoint("BOTTOM", bar, "TOP", 0, 6)
@@ -611,7 +654,7 @@ table.insert(WP.setupHooks, function()
   for s = 0, 3 do
     local t = CreateFrame("Button", "WowPadBarLiteTab" .. s, bar, "UIPanelButtonTemplate")
     t:SetSize(s == 0 and 62 or 50, 20)
-    t:SetText(LITE_NAMES[s])
+    WP.KeyText(t, LITE_NAMES[s])
     t:SetScript("OnClick", function()
       if InCombatLockdown() then return end
       WP.header:SetAttribute("liteview", s)
@@ -657,7 +700,9 @@ pressHookEv:SetScript("OnEvent", function() if Bar.frame then HookFixedPresses()
 local ev = CreateFrame("Frame")
 for _, e in ipairs({ "ACTIVE_TALENT_GROUP_CHANGED", "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_USABLE",
                      "BAG_UPDATE", "BAG_UPDATE_COOLDOWN", "ACTIONBAR_UPDATE_COOLDOWN", "PLAYER_TARGET_CHANGED",
-                     "UPDATE_MACROS", "LEARNED_SPELL_IN_TAB", "PLAYER_REGEN_DISABLED", "PLAYER_ENTERING_WORLD" }) do
+                     "UPDATE_MACROS", "LEARNED_SPELL_IN_TAB", "PLAYER_REGEN_DISABLED", "PLAYER_ENTERING_WORLD",
+                     "CURRENT_SPELL_CAST_CHANGED", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL",
+                     "ACTIONBAR_UPDATE_STATE" }) do
   ev:RegisterEvent(e)
 end
 ev:SetScript("OnEvent", function(_, event)
@@ -666,6 +711,9 @@ ev:SetScript("OnEvent", function(_, event)
     Bar.Load()
   elseif event == "PLAYER_REGEN_DISABLED" then
     if Bar.editing then Bar.SetEditing(false) end -- last moment before lockdown
+  elseif event == "CURRENT_SPELL_CAST_CHANGED" or event == "START_AUTOREPEAT_SPELL"
+      or event == "STOP_AUTOREPEAT_SPELL" or event == "ACTIONBAR_UPDATE_STATE" then
+    for _, btn in pairs(slots) do Bar.UpdateState(btn) end
   else
     Bar.UpdateAll()
   end
@@ -717,6 +765,10 @@ table.insert(WP.setupHooks, function()
   Ring.help:SetText("UTILITY RING - drag spells, items, macros or mounts onto the wedges; right-click clears")
   Ring.help:Hide()
   Ring.frame, Ring.wedges = r, {}
+  -- Edit mode: the hub is the drag / wheel handle (the wedges stay free for
+  -- dragging spells onto them). Saved in WowPadDB.movers.ring.
+  WP.MakeMover(r, "ring", "Ring", RING_WHEEL * 0.42)
+  WP.ApplyMoverPos(r)
   for d = 1, 8 do
     local a = math.rad((d - 1) * 45)                 -- wedge 1 = up, clockwise
     -- Icons as big as the main menu's: scaled, so the offset is divided back.
@@ -750,5 +802,6 @@ function Bar.SetEditing(on)
   local show = on and WP.RingSlotKey() ~= nil
   if show then Ring.frame:Show() else Ring.frame:Hide() end
   if show then Ring.help:Show() else Ring.help:Hide() end
+  if show then Ring.frame.mover:Show() else Ring.frame.mover:Hide() end
   Ring.Highlight(0)
 end

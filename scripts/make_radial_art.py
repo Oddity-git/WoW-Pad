@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Generates the radial menu art (WowPad's own, no game or third-party art).
 
+Style: eight separate rounded tiles with a small gap between them, each with a
+dark metal border and a fine light inner line, around a slim metal hub ring
+(after WoW Forever's controller wheel).
+
 Geometry is in wheel units: outer radius 1.0 = edge of the texture square.
-  radial_frame.tga   256x256  top-right quarter of the bronze rim / spokes / hub ring
-  radial_wedge0.tga  256x256  wedge fill centred straight up   (white, tinted in Lua)
-  radial_wedge45.tga 256x256  wedge fill centred up-right
-  radial_glow0.tga / radial_glow45.tga  selection glow along the wedge edge (white, ADD)
+  radial_frame.tga   256x256  top-right quarter: tile borders, hub ring, hub fill
+  radial_wedge0.tga  256x256  tile fill centred straight up   (white, tinted in Lua)
+  radial_wedge45.tga 256x256  tile fill centred up-right
+  radial_glow0.tga / radial_glow45.tga  selection glow inside the tile border (white, ADD)
 Other wedges are these rotated by 90 degree steps with SetTexCoord.
 """
 import numpy as np
@@ -13,10 +17,17 @@ from PIL import Image
 import os, sys
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "addon/WowPad/Textures"
-R_OUT, RIM = 1.0, 0.09         # outer radius, rim width
-R_HUB, HUB_W = 0.30, 0.055     # hub ring (outer radius of the ring), ring width
-SPOKE_W = 0.06                 # spoke width (wheel units)
+R_OUT, R_IN = 0.985, 0.335     # tile outer / inner radius
+GAP = 0.034                    # gap between neighbouring tiles
+BW = 0.038                     # tile border width
+CORNER = 0.05                  # tile corner rounding
+HUB_OUT, HUB_IN = 0.300, 0.250 # hub ring
 SS = 4                         # supersampling
+
+METAL_DARK = np.array([22, 20, 17])
+METAL = np.array([62, 58, 50])
+METAL_LIGHT = np.array([128, 120, 102])
+HUB_FILL = np.array([62, 32, 18])
 
 def grid(px):
     n = px * SS
@@ -27,67 +38,74 @@ def grid(px):
     return x, y, r, a
 
 def down(img, px):
-    im = Image.fromarray(img, "RGBA")
-    return im.resize((px, px), Image.LANCZOS)
+    return Image.fromarray(img, "RGBA").resize((px, px), Image.LANCZOS)
 
-def spoke_dist(x, y, a):
-    """Perpendicular distance to the nearest spoke line (spokes at 22.5 + k*45 deg)."""
-    best = np.full(x.shape, 9.0)
-    for k in range(8):
-        t = np.radians(22.5 + 45 * k)
-        dx, dy = np.sin(t), np.cos(t)              # direction (0 deg = up)
-        along = x * dx + y * dy
-        perp = np.abs(x * dy - y * dx)
-        d = np.where(along > 0, perp, 9.0)
-        best = np.minimum(best, d)
-    return best
+def side_dist(x, y, t_deg):
+    """Distance from a spoke line through the centre at angle t (0 = up)."""
+    t = np.radians(t_deg)
+    return np.abs(x * np.cos(t) - y * np.sin(t))
 
-def bevel(d, half):
-    """1 at the centre line of a band, 0 at its edges."""
-    return np.clip(1 - np.abs(d) / half, 0, 1)
+def tile_edge(x, y, r, a, center):
+    """Signed distance inside the tile centred at `center` degrees (>0 inside),
+    with rounded corners. Points outside the tile's sector get -1."""
+    da = (a - center + 180) % 360 - 180
+    sector = np.abs(da) < 22.5 + 5
+    d_left = side_dist(x, y, center - 22.5) - GAP / 2
+    d_right = side_dist(x, y, center + 22.5) - GAP / 2
+    d_side = np.minimum(d_left, d_right)
+    d_rad = np.minimum(r - R_IN, R_OUT - r)
+    d1, d2 = np.minimum(d_side, d_rad), np.maximum(d_side, d_rad)
+    rc = CORNER
+    corner = (d1 < rc) & (d2 < rc)
+    e = np.where(corner, rc - np.hypot(rc - d1, rc - d2), d1)
+    inside_wedge = np.abs(da) <= 22.5
+    return np.where(sector & inside_wedge, e, -1.0)
 
-def frame(px=512, quadrant=False):
+def band_colour(t):
+    """Border profile across the band: t = 0 outer edge .. 1 inner edge."""
+    col = np.where(t[..., None] < 0.18, METAL_DARK,
+          np.where(t[..., None] < 0.62, METAL,
+          np.where(t[..., None] < 0.82, METAL_LIGHT, METAL_DARK)))
+    return col
+
+def frame(px=512):
     x, y, r, a = grid(px)
-    rim_c = R_OUT - RIM / 2
-    rim = bevel(r - rim_c, RIM / 2)
-    hub_c = R_HUB - HUB_W / 2
-    hub = bevel(r - hub_c, HUB_W / 2)
-    sd = spoke_dist(x, y, a)
-    spoke = np.where((r > R_HUB - HUB_W * 0.5) & (r < R_OUT - RIM * 0.5), bevel(sd, SPOKE_W / 2), 0)
-    m = np.maximum(np.maximum(rim, hub), spoke)
-    alpha = np.clip(m * 6, 0, 1)                  # solid inside, soft 1/6 edge
-    # bronze: dark edges, light ridge, a little top-left light
-    light = 0.6 + 0.4 * m
-    base = np.array([96, 70, 44]) / 255.0
-    hi = np.array([182, 140, 88]) / 255.0
-    col = base[None, None, :] * (1 - m[..., None]) * 0.6 + hi[None, None, :] * m[..., None]
-    col = np.clip(col * light[..., None], 0, 1)
-    img = np.dstack([col * 255, alpha * 255]).astype(np.uint8)
+    rgb = np.zeros(x.shape + (3,))
+    alpha = np.zeros(x.shape)
+    for k in range(8):
+        e = tile_edge(x, y, r, a, 45 * k)
+        on = (e > 0) & (e < BW)
+        t = np.clip(e / BW, 0, 1)
+        rgb = np.where(on[..., None], band_colour(t), rgb)
+        alpha = np.where(on, 1.0, alpha)
+    # hub ring + hub fill
+    er = np.minimum(r - HUB_IN, HUB_OUT - r)
+    ring = er > 0
+    tr = np.clip(er / ((HUB_OUT - HUB_IN) / 2), 0, 1)       # 0 at both edges, 1 mid
+    ring_col = np.where(tr[..., None] < 0.35, METAL_DARK, np.where(tr[..., None] < 0.75, METAL, METAL_LIGHT))
+    rgb = np.where(ring[..., None], ring_col, rgb)
+    alpha = np.where(ring, 1.0, alpha)
+    hub = r <= HUB_IN
+    rgb = np.where(hub[..., None], HUB_FILL, rgb)
+    alpha = np.where(hub, 0.86, alpha)
+    img = np.dstack([rgb, alpha * 255]).astype(np.uint8)
     im = down(img, px)
-    if quadrant:   # top-right quarter only; Lua rotates it into the other three
-        im = im.crop((px // 2, 0, px, px // 2))
-    return im
+    return im.crop((px // 2, 0, px, px // 2))        # top-right quarter only
 
 def wedge(center_deg, px=256, glow=False):
     x, y, r, a = grid(px)
-    da = (a - center_deg + 180) % 360 - 180       # angle from wedge centre
-    inside_ang = np.abs(da) <= 22.5
-    sd = spoke_dist(x, y, a)
-    r_in, r_out = R_HUB - HUB_W * 0.2, R_OUT - RIM * 0.6
-    inside = inside_ang & (r > r_in) & (r < r_out)
+    e = tile_edge(x, y, r, a, center_deg)
     if not glow:
-        alpha = inside.astype(float)
+        alpha = (e > BW * 0.5).astype(float)
     else:
-        # distance to the wedge border (spokes, hub, rim), glow fading inward
-        edge = np.minimum(np.minimum(sd, r - r_in), r_out - r)
-        alpha = np.where(inside, np.clip(1 - edge / 0.07, 0, 1) ** 1.6, 0)
+        alpha = np.where(e > BW * 0.8, np.clip(1 - (e - BW) / 0.07, 0, 1) ** 1.6, 0)
     img = np.dstack([np.ones_like(alpha) * 255] * 3 + [alpha * 255]).astype(np.uint8)
     return down(img, px)
 
 os.makedirs(OUT, exist_ok=True)
 def save(im, name):
     im.save(os.path.join(OUT, name), compression="tga_rle")
-save(frame(quadrant=True), "radial_frame.tga")   # 256x256 quarter of a 512 wheel
+save(frame(), "radial_frame.tga")
 save(wedge(0), "radial_wedge0.tga")
 save(wedge(45), "radial_wedge45.tga")
 save(wedge(0, glow=True), "radial_glow0.tga")

@@ -402,8 +402,10 @@ end
 -- Other addons' windows that don't register with the game's panel system
 -- (so GetUIPanel/UISpecialFrames don't list them) but should count as open
 -- windows. DialogUI: DGossipFrame (its quest frame is a normal UI panel).
+-- Immersion: ImmersionFrame (it takes over the gossip and quest windows).
+-- OpenMailFrame: the letter opened from the mailbox (a window of its own).
 -- Also the Esc menu and its option windows, which aren't always listed either.
-WP.EXTRA_WINDOWS = { "DGossipFrame", "DQuestFrame", "GameMenuFrame", "VideoOptionsFrame",
+WP.EXTRA_WINDOWS = { "DGossipFrame", "DQuestFrame", "ImmersionFrame", "OpenMailFrame", "GameMenuFrame", "VideoOptionsFrame",
                      "AudioOptionsFrame", "InterfaceOptionsFrame", "KeyBindingFrame" }
 
 -- A window some addon keeps "open" but out of sight (New Era cloaks Blizzard's
@@ -542,9 +544,9 @@ local function PlaceHint()
 end
 gtHint:SetFrameStrata("HIGH")
 gtHint:Hide()
-local gtText = gtHint:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+local gtText = WP.NewKeyLine(gtHint, "GameFontHighlight", 20)   -- icons level with the words
 gtText:SetPoint("CENTER")
-gtText:SetText("|cffffd100A|r or same button: Place     |cffffd100B|r Cancel")
+gtText:SetParts({ { key = "A", text = "or same button: Place" }, { key = "B", text = "Cancel" } }, 14)
 -- Called from the mouselook update loop below (every 0.05 s).
 local reblank
 function WP.GroundTargetTick()
@@ -637,7 +639,7 @@ function WP.UpdateStatus()
     statusText:SetText("WowPad: |cffaaaaaaDESKTOP|r")
     return
   end
-  local set = WP.SET_NAMES[WP.set] or "?"
+  local set = WP.Keys(WP.SET_NAMES[WP.set] or "?")
   local buttons = (WP.ctx == "menu" and WP.set == 0) and "  |cff66ccffmenu buttons|r" or ""
   statusText:SetText(("WowPad: |cff55ff55CONTROLLER|r  set: |cffffff00%s|r  %s%s%s"):format(
     set, WP.context or "?", buttons, WP.pointer and "  |cffff9900pointer mode|r" or ""))

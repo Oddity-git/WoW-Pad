@@ -179,27 +179,40 @@ local function Build()
     .. "marks them on your unit frames. Works in combat. While the bumper is held, the right stick's up/down is used "
     .. "for this (left/right still turns the camera). Off: the bumper targets the nearest friendly.",
     R - 4, -146, DllGet("wpBumperFlick"), DllSet("wpBumperFlick"))
-  Header("Messages", R - 4, -180)
+  Check("WowPadOptPS", "PlayStation button labels",
+    "Shows Cross / Circle / Square / Triangle, L1 / R1, L2 / R2, Share and Options instead of the Xbox names: "
+    .. "on the controller bar and in every hint. Changes at once.",
+    R - 4, -170, function() return WP.ButtonStyle() == "ps" end,
+    function(v) WP.SetButtonStyle(v and "ps" or "xbox") end)
+  -- Labels that name buttons follow the style.
+  WP.KeyText(_G.WowPadOptSwapLBRBText, "Swap {LB} / {RB} targeting", true)
+  WP.KeyText(_G.WowPadOptKeyboardText, "On-screen keyboard ({Back} + {A})", true)
+  do  -- the label has a button icon (draws high): keep it level with its checkbox
+    local t = _G.WowPadOptKeyboardText
+    t:ClearAllPoints()
+    t:SetPoint("LEFT", _G.WowPadOptKeyboard, "RIGHT", 0, 1 + WP.IconNudge(t:GetText()))
+  end
+  Header("Messages", R - 4, -204)
   Check("WowPadOptStatus", "Show the status line", "Mode, set and context above the bar.",
-    R - 4, -198, function() return WowPadDB.showStatus == true end,
+    R - 4, -222, function() return WowPadDB.showStatus == true end,
     function(v) WowPadDB.showStatus = v; WP.UpdateStatus() end)
   Check("WowPadOptDebug", "Debug messages in chat", nil,
-    R - 4, -222, function() return WowPadDB.debug == true end,
+    R - 4, -246, function() return WowPadDB.debug == true end,
     function(v) WowPadDB.debug = v end)
 
-  Header("|cffff9900Experimental|r", R - 4, -256)
+  Header("|cffff9900Experimental|r", R - 4, -280)
   Check("WowPadOptWalk", "Walk/run by stick tilt*",
     "Slight tilt walks, full tilt runs, using the game's Run/Walk toggle. Stopping always returns to running. If you press the "
     .. "keyboard Run/Walk key yourself, slight and full tilt swap; press that key again to fix it.",
-    R - 4, -274, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
+    R - 4, -298, DllGet("wpWalkRun"), DllSet("wpWalkRun"))
   Check("WowPadOptSmooth", "Smooth camera*",
     "Smooths right-stick camera turning, so it glides instead of stepping. Adds a little delay "
     .. "(about 60 ms, [Camera] SmoothMs in wowpad.ini). Camera only, not the pointer.",
-    R - 4, -298, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
+    R - 4, -322, DllGet("wpCamSmooth"), DllSet("wpCamSmooth"))
 
   local ft = CreateFrame("Button", "WowPadOptFirstTime", panel, "UIPanelButtonTemplate")
   ft:SetSize(170, 22)
-  ft:SetPoint("TOPLEFT", R - 4, -334)
+  ft:SetPoint("TOPLEFT", R - 4, -358)
   ft:SetText("First-time setup")
   ft:SetScript("OnClick", function()
     if InterfaceOptionsFrame then InterfaceOptionsFrame:Hide() end
@@ -255,12 +268,13 @@ local function Build()
     end)
 
   -- Utility ring: which bar slot opens it (the DLL needs it too: Apply).
+  -- Menu entries use button names, not icons (icons sit badly in dropdown rows).
   Header("Utility ring", R - 4, -116)
   local SETS = { [0] = "Default", "LT", "RT", "LT+RT" }
   local function SlotName(v)
     if not v or v <= 0 then return "None" end
     local set, i = math.floor(v / 10), v % 10
-    return SETS[set] .. ": " .. WP.SLOT_LABELS[i]
+    return WP.KeysPlain(SETS[set]) .. ": " .. WP.KeysPlain(WP.SLOT_LABELS[i])
   end
   local dd = CreateFrame("Frame", "WowPadOptRing", barsPanel, "UIDropDownMenuTemplate")
   dd:SetPoint("TOPLEFT", R - 20, -134)
@@ -279,7 +293,7 @@ local function Build()
       UIDropDownMenu_AddButton(info, 1)
       for set = 0, 3 do
         info = UIDropDownMenu_CreateInfo()
-        info.text, info.hasArrow, info.notCheckable, info.value = SETS[set] .. " set", true, true, set
+        info.text, info.hasArrow, info.notCheckable, info.value = WP.KeysPlain(SETS[set]) .. " set", true, true, set
         UIDropDownMenu_AddButton(info, 1)
       end
     else
@@ -287,13 +301,14 @@ local function Build()
       if not set then return end
       for i = 1, (set == 0 and 4 or 8) do       -- default set: A/B/X/Y are fixed
         info = UIDropDownMenu_CreateInfo()
-        info.text, info.arg1, info.func = WP.SLOT_LABELS[i], set * 10 + i, Pick
+        info.text, info.arg1, info.func = WP.KeysPlain(WP.SLOT_LABELS[i]), set * 10 + i, Pick
         info.checked = tonumber(WowPadDB.wpRingSlot) == set * 10 + i
         UIDropDownMenu_AddButton(info, level)
       end
     end
   end)
   UIDropDownMenu_SetText(dd, SlotName(tonumber(WowPadDB.wpRingSlot)))
+  table.insert(WP.styleHooks, function() UIDropDownMenu_SetText(dd, SlotName(tonumber(WowPadDB.wpRingSlot))) end)
   local rn = barsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
   rn:SetPoint("TOPLEFT", R, -166)
   rn:SetWidth(180)

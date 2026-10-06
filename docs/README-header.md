@@ -40,6 +40,7 @@ these addons have been either fixed to work or were working by default:
 - Bagnon
 - DialogUI
 - DragonUI and DragonUI New Era (with !!!ClassicAPI)
+- Immersion
 - Postal
 - Questie-335
 
