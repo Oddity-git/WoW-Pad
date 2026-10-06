@@ -7,14 +7,18 @@ client, resembling WoW Forever's controller support: move and look with the
 sticks, a round controller action bar on the triggers, menus you can drive with
 the D-pad, a radial main menu and a crosshair. Client-side only; nothing on the
 server changes.
-
-<img width="1913" height="1075" alt="image" src="https://github.com/user-attachments/assets/b38129df-c066-4ca3-9277-1b6577fad361" />
+<p align="center">
+<img width="838" height="421" alt="image" src="https://github.com/user-attachments/assets/922fa9c7-8896-4ee9-a7da-88c9d92bf181" />
+</p>
 
 <p align="center">Full D-Pad Menu Navigation</p>
-<img width="1910" height="891" alt="image" src="https://github.com/user-attachments/assets/8f643d12-50d5-40cc-ac97-765e88f880cd" />
-
+  <p align="center">
+<img width="1530" height="742" alt="image" src="https://github.com/user-attachments/assets/80695d57-3a9c-4ac0-bf9a-e7d5c3f5f139" />
+  </p>
 <p align="center">Edit Mode with center line snapping</p>
-<img width="1398" height="685" alt="image" src="https://github.com/user-attachments/assets/40645374-f35d-4e4f-9b0b-350db39f92c5" />
+  <p align="center">
+<img width="1248" height="902" alt="image" src="https://github.com/user-attachments/assets/9287c97e-e8c8-44ac-b17e-1777f4f65516" />
+  </p>
 
 
 It has two parts that work together:
@@ -127,6 +131,9 @@ Interface/AddOns/WowPad/   (or interface/addons/WowPad on Linux)
 
 
 ## Controls
+<p align="center">
+<img width="764" height="539" alt="image" src="https://github.com/user-attachments/assets/142043c4-8307-4c3b-97b4-083cbf580b5e" />
+</p>
 
 | Button | Does |
 |---|---|
@@ -179,8 +186,9 @@ item). In combat these windows leave your controls alone; roll when the fight
 is over.
 
 ### Chat: on-screen keyboard
-
-<img width="599" height="544" alt="image" src="https://github.com/user-attachments/assets/0b38c8f2-ec1d-4d2f-85b7-f8376c1dabd4" />
+<p align="center">
+<img width="507" height="561" alt="image" src="https://github.com/user-attachments/assets/3bef566f-1f9a-4921-88bc-1b87b1b69a8c" />
+</p>
 
 
 **Back + A** opens a small keyboard above the chat window (controller mode, out
@@ -203,7 +211,9 @@ Options: Back + A then just opens the normal chat box, and Back + A / Back + B
 send or close it while you type.
 
 ### World map
-<img width="1224" height="810" alt="image" src="https://github.com/user-attachments/assets/0a0acb75-8201-4eab-af09-96ef0768e864" />
+<p align="center">
+<img width="861" height="632" alt="image" src="https://github.com/user-attachments/assets/c5e8a8b3-ccc8-4eb8-9f64-e6897c585ebc" />
+</p>
 The map gets its own cursor: a gold diamond with crosshair lines, plus cursor
 and player coordinates.
 
@@ -225,8 +235,9 @@ turning can cause a small hiccup. Needs Hardware Cursor (Esc > Video, on by
 default).
 
 ### Healer mode
+<p align="center">
 <img width="602" height="611" alt="image" src="https://github.com/user-attachments/assets/9e0cbfed-3c54-4531-bf85-1073ce836aa8" />
-
+</p>
 
 Off by default: Options > Buttons > **Healer mode**, then **Apply**.
 
@@ -240,7 +251,9 @@ Works in combat. With healer mode off, the ally bumper targets the nearest
 friendly as before.
 
 ### Utility ring
-<img width="612" height="724" alt="image" src="https://github.com/user-attachments/assets/5a381251-86c4-4ba6-8200-b48e51a1310a" />
+<p align="center">
+<img width="861" height="632" alt="image" src="https://github.com/user-attachments/assets/2a346832-3a23-440e-83eb-79854c0ecf1a" />
+</p>
 
 Eight spells, items or macros on one button. Options > WowPad > Bars >
 **Utility ring**: pick the button that opens it (a D-pad button, or any slot
@@ -250,7 +263,9 @@ wedge, let go to use it. Let go in the middle to cancel. Works in combat.
 In Edit bar layout, drag its centre to move it and use the mouse wheel there to resize it.
 
 ### Lite bar
-<img width="1895" height="1079" alt="image" src="https://github.com/user-attachments/assets/b9b9dc7b-65a9-4c52-8cfb-81b2465a9d1c" />
+<p align="center">
+<img width="861" height="632" alt="image" src="https://github.com/user-attachments/assets/0169e017-cb97-4dfe-8d9e-e57393677e01" />
+</p>
 
 Options > WowPad > Bars > **Lite mode** shows one cluster instead of four: your
 default set, and while you hold LT, RT or both, that set in its place (a small
@@ -259,7 +274,9 @@ bottom edge of the screen. In **Edit bar layout**, tabs above it (Default / LT /
 RT / LT+RT) pick which set you're filling.
 
 ### Radial menu (Start)
-<img width="1913" height="1075" alt="image" src="https://github.com/user-attachments/assets/d7ccb686-51ae-4688-9ced-95b79016fdbc" />
+<p align="center">
+<img width="505" height="519" alt="image" src="https://github.com/user-attachments/assets/de2f0a1d-ddc8-4b1c-8556-8d99e423023b" />
+</p>
 A radial wheel with three pages (LB / RB). Point the right stick at a wedge
 and press A; B or Start closes it. In **Edit bar layout** it shows in a blue
 box: drag it to move it, mouse wheel to resize.
@@ -286,7 +303,9 @@ it picks; see its page.
 
 
 ## Options
-
+<p align="center">
+<img width="821" height="657" alt="image" src="https://github.com/user-attachments/assets/e9ca9fa6-30c0-45bf-a8cf-75d35b9ac1b7" />
+</p>
 Esc > Interface > AddOns > WowPad (or `/wp options`). Settings marked `*`
 need **Apply** (reloads the UI).
 
@@ -301,7 +320,9 @@ need **Apply** (reloads the UI).
   `[Camera] SmoothMs` in `wowpad.ini` sets how much).
 
 **WowPad > Bars** (click the `+` next to WowPad in the list):
-
+<p align="center">
+<img width="819" height="655" alt="image" src="https://github.com/user-attachments/assets/260fb8a1-aa07-444d-bd47-b20386667aa4" />
+</p>
 - **Controller bar:** always visible, hide Blizzard's bars, size, edit layout.
 - **Lite mode:** one cluster at a time (see "Lite bar" above).
 - **Utility ring:** which button opens it (see "Utility ring" above).
@@ -346,7 +367,6 @@ Chat commands: `/wp firsttime`, `/wp options`, `/wp edit`, `/wp scale 0.8`, `/wp
   closing a window.
 - Assigning action bar slots with the controller (picking from the
   spellbook) instead of dragging with the mouse.
-- Steam Controller extras: trackpads, gyro and back buttons.
 
 Have an idea or found a bug? Open an issue with your `wowpad.log`.
 
@@ -361,9 +381,7 @@ until you delete them.
 ## How this was made
 
 WowPad is 100% vibe-coded. Every line of the DLL and the addon was written by
-Claude (Anthropic's AI) in one long conversation, while I played the game and
-said what I wanted: "the bar should be round", "B should back out of menus",
-"the hand cursor flickers when the camera stops". I tested each build in game
+Claude (Anthropic's AI) in one long conversation. I tested each build in game
 and sent back logs, screenshots and Lua errors; Claude read them, fixed things
 and sent the next version. Many versions later, this is the one that plays
 the way I wanted.
@@ -375,7 +393,7 @@ breaks on yours, open an issue with your `wowpad.log` and what you were
 doing; that's exactly how it got built.
 
 ## Credits
-
+- Claude(really tho? homie just yoinks everything from the internet)
 - WowPad: made for a private AzerothCore setup, with Claude (Anthropic).
 - Interact: [Awesome WotLK](https://github.com/someweirdhuman/awesome_wotlk)
   by someweirdhuman, based on [FrostAtom's awesome_wotlk](https://github.com/FrostAtom/awesome_wotlk).
